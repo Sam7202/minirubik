@@ -20,6 +20,7 @@ build.c + gen_tables.c ──make tables──▶ tables.s ───────
 | `search.c`、`search.h` | target | IDA* 搜尋，只讀表、不建表；組語版的對照 |
 | `solve.c` | host | C 版搜尋的命令列介面，輸入格式與 solver.c 相同 |
 | `verify.c` | 只在 host | 窮舉驗證表和搜尋 |
+| `rv32/` | host＋Ripes | **Ripes 實測**：search.c＋tables.c 編成 RV32 在 Ripes 跑 `--iret`，再回 host 驗證（`make verify`）；`baseline/` 是原版 solver.c |
 | `rv32i-measure/` | host | 把 search.c 編成 RV32I、數指令數，並確認 tables.s 和 tables.c 內容相同 |
 
 `tables.c`、`tables.s`、`tables_ripes.s` 由 `make` 產生，不要手改。
@@ -33,6 +34,7 @@ make tables                # 只重新產生表格檔
 make quick                 # 全部狀態的表格檢查，IDA* 每 97 個抽 1 個，約 10 秒
 make check                 # 全部 3,674,160 個狀態，約 2 分鐘
 make PDB=2                 # 只用兩張 PDB 的版本，檔名多一個 2（tables2.s、verify2…）
+cd rv32 && make verify         # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
 cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
 ```
 
