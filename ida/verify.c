@@ -92,6 +92,9 @@ static void state_digits(const state_t *s, char out[15])
 static int node_eq(node_t a, node_t b)
 {
     return a.p == b.p && a.o == b.o
+#if CORNER_PDB
+           && a.cp == b.cp && a.co == b.co
+#endif
         ;
 }
 
@@ -104,6 +107,12 @@ static void print_memory(void)
     printf("  ori_q   [3][729]  u16  %6zu B\n", sizeof ori_q);
     printf("  perm_h  [5040]    u8   %6zu B\n", sizeof perm_h);
     printf("  ori_h   [729]     u8   %6zu B\n", sizeof ori_h);
+#if CORNER_PDB
+    printf("  c4pos_q [3][840]  u16  %6zu B\n", sizeof c4pos_q);
+    printf("  c4tw_q  [3][840]  u8   %6zu B\n", sizeof c4tw_q);
+    printf("  add81   [81][81]  u8   %6zu B\n", sizeof add81);
+    printf("  c4_h    [68040]   u8   %6zu B\n", sizeof c4_h);
+#endif
     printf("  total                  %6zu B (%.1f KiB)\n", ida_table_bytes(),
            ida_table_bytes() / 1024.0);
     printf("host only (verify.c): oracle %u B + BFS queue %zu B\n\n",
@@ -212,7 +221,7 @@ static void pdb_stats(const char *name, const uint8_t *h, uint32_t n)
 
 static void check_heuristic(void)
 {
-    uint32_t over_p = 0, over_o = 0, over_h = 0, over_sum = 0;
+    uint32_t over_p = 0, over_o = 0, over_c = 0, over_h = 0, over_sum = 0;
     uint32_t inconsistent = 0, zero_elsewhere = 0, gap[12] = {0};
     uint64_t hsum = 0, dsum = 0;
 
@@ -223,6 +232,9 @@ static void check_heuristic(void)
         uint8_t d = dist[r], hp = perm_h[n.p], ho = ori_h[n.o], h = node_h(n);
         over_p += hp > d;
         over_o += ho > d;
+#if CORNER_PDB
+        over_c += c4_h[(uint32_t) n.cp * C4ORI + n.co] > d;
+#endif
         over_sum += hp + ho > d;
         zero_elsewhere += h == 0 && r != 0;
         if (h > d)
@@ -243,6 +255,8 @@ static void check_heuristic(void)
     CHECK(over_p == 0, "perm PDB exceeds true distance on %u states", over_p);
     CHECK(over_o == 0, "orient PDB exceeds true distance on %u states",
           over_o);
+    CHECK(over_c == 0, "corner PDB exceeds true distance on %u states",
+          over_c);
     CHECK(over_h == 0, "h exceeds true distance on %u states", over_h);
     CHECK(inconsistent == 0, "h inconsistent on %u edges", inconsistent);
     CHECK(zero_elsewhere == 0, "h = 0 on %u unsolved states", zero_elsewhere);
@@ -342,6 +356,9 @@ int main(int argc, char **argv)
     check_tables();
     pdb_stats("perm", perm_h, PERMS);
     pdb_stats("orient", ori_h, ORIS);
+#if CORNER_PDB
+    pdb_stats("corner4", c4_h, C4SIZE);
+#endif
     check_heuristic();
     check_ida(lo, hi, step);
 

@@ -12,12 +12,13 @@ target 端只需要約 40 KB 的表；verify.c 在 host 上窮舉 3,674,160 個�
 | `solve.c` | host | 命令列介面，輸入格式、錯誤碼與 solver.c 相同 |
 | `verify.c` | 只在 host | oracle 與全部檢查，不上 target |
 
-h = max(排列 PDB, 方向 PDB)。
+`CORNER_PDB=0`（預設）：h = max(排列 PDB, 方向 PDB)。
+`CORNER_PDB=1`：再跟「4 顆角塊的位置與方向」PDB 取 max，是節點預算不夠時的備案。
 
 ## 建置與執行
 
 ```sh
-make                       # solve、verify
+make                       # solve、verify，以及加上 4 角塊 PDB 的 solve_c4、verify_c4
 ./solve 21345671111111     # 解法印到 stdout；長度、展開數、表格大小印到 stderr
 make quick                 # 表格與 heuristic 檢查跑全部狀態，IDA* 每 97 個狀態抽 1 個，約 10 秒
 ./verify                   # IDA* 跑全部 3,674,160 個狀態，單核約 5 分鐘
@@ -36,16 +37,16 @@ make quick                 # 表格與 heuristic 檢查跑全部狀態，IDA* �
 
 ## 結果（全部 3,674,160 個狀態都跑過）
 
-| | 兩張 PDB |
-| :--- | ---: |
-| target 表格 | 40,383 B（39.4 KiB） |
-| clang -O2 rv32i：.text + .bss | 4,032 + 40,398 B |
-| dfs 每層 stack frame（最多 11 層） | 80 B |
-| 平均展開 | 2,697 |
-| 最壞展開 | 106,635 |
-| 最壞產生 | 639,792 |
-| 產生數超過 250,000 的狀態 | 428 |
-| 最短解正確性 | 全部正確 |
+| | `CORNER_PDB=0` | `CORNER_PDB=1` |
+| :--- | ---: | ---: |
+| target 表格 | 40,383 B（39.4 KiB） | 122,544 B（119.7 KiB） |
+| clang -O2 rv32i：.text + .bss | 4,032 + 40,398 B | 7,912 + 122,560 B |
+| dfs 每層 stack frame（最多 11 層） | 80 B | 112 B |
+| 平均展開 | 2,697 | 348 |
+| 最壞展開 | 106,635 | 19,797 |
+| 最壞產生 | 639,792 | 118,767 |
+| 產生數超過 250,000 的狀態 | 428 | 0 |
+| 最短解正確性 | 全部正確 | 全部正確 |
 
 - **展開**：通過 bound 檢查、產生了子節點的節點。**產生**：每次呼叫 `node_quarter` 算一個。兩者都是所有 IDA* 迭代的累加。
 - verify.c 的 oracle（3.5 MiB）和 BFS queue（14 MiB）只在 host 上用，不算進 target。
@@ -55,4 +56,5 @@ make quick                 # 表格與 heuristic 檢查跑全部狀態，IDA* �
 
 - IDA* 的解和 solver.c 的不一定是同一串。tests/solutions.txt 的 8 組裡有 3 組不同（長度相同，都是最短解）。如果 lab 是逐 byte 比對輸出，要先確認規格。
 - `build_pdb` 用了 `memset`，翻成組語時要自己寫迴圈。
-- 用 clang 把 C 編成 rv32i 時，init 階段那些「用加法代替乘法」的迴圈會被編譯器改回 `__mulsi3`/`__umodsi3` 呼叫；搜尋迴圈（dfs）裡沒有任何 helper 呼叫。
+- 用 clang 把 C 編成 rv32i 時，init 階段那些「用加法代替乘法」的迴圈會被編譯器改回 `__mulsi3`/`__umodsi3` 呼叫。`CORNER_PDB=0` 的搜尋迴圈（dfs）裡沒有任何 helper 呼叫；`CORNER_PDB=1` 的 dfs 因為要算 `cp * 81` 而有 `__mulsi3`。
+- 4 角塊 PDB 的最大值是 8，改用 4 bit 存可以把 `c4_h` 從 68,040 B 降到 34,020 B，總計約 86 KiB。

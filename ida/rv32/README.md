@@ -1,7 +1,7 @@
 # rv32 — 在 Ripes 上建表並搜尋
 
 `search_rv32.c` 直接 `#include "../ida.c"`，開機先呼叫 `ida_init()` 在 target 上建好
-move table 和兩張 PDB，再對 `cases[]` 裡的每個狀態跑 IDA*。
+move table 和 PDB（預設兩張；`CORNER_PDB=1` 再加 4 角塊 PDB），再對 `cases[]` 裡的每個狀態跑 IDA*。
 
 ## 用法
 
@@ -10,6 +10,7 @@ export PATH="$HOME/Library/xPacks/riscv-none-elf-gcc/current/bin:$PATH"
 make run                              # rv32i，RV32_ISS（預設，最快）
 make run PROC=RV32_5S                 # 要看 pipeline 週期數就換這個
 make run ARCH=rv32im ISAEXTS=M        # 開 M 擴充
+make run CORNER_PDB=1                 # 加上 4 角塊 PDB
 make size-ida                         # 只編 ida.c，看 .text / .bss
 ```
 

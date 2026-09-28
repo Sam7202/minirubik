@@ -3,6 +3,7 @@
 #   make run              rv32i on Ripes' functional model
 #   make run ARCH=rv32im ISAEXTS=M
 #   make run PROC=RV32_5S pipeline model (much slower)
+#   make run CORNER_PDB=1 also build and use the 4-corner PDB
 
 RIPES     ?= /Applications/Ripes.app/Contents/MacOS/Ripes
 RVCC      ?= riscv-none-elf-gcc
@@ -14,10 +15,12 @@ PROC      ?= RV32_ISS      # functional ISA sim: ~120x faster wall-clock.
                           # Use RV32_5S for pipeline cycle counts.
 ISAEXTS   ?=
 TIMEOUT   ?= 600000
+CORNER_PDB ?= 0
 
 RVCFLAGS   ?= -march=$(ARCH) -mabi=$(ABI) -O2 -std=c99 -Wall -Wextra \
               -ffreestanding -nostdlib -fno-builtin \
-              -fno-tree-loop-distribute-patterns -g
+              -fno-tree-loop-distribute-patterns -g \
+              -DCORNER_PDB=$(CORNER_PDB)
 DEPS := ../ida.c ../ida.h ../cube.h
 
 all: search_rv32.bin
@@ -43,4 +46,4 @@ size-ida:
 clean:
 	$(RM) search_rv32.elf search_rv32.bin ida_rv32.o
 
-.PHONY: all run size-ida clean
+.PHONY: all run size-ida clean search_rv32.elf
