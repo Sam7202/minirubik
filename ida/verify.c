@@ -1,5 +1,9 @@
 /* verify.c - host-only harness; nothing in this file runs on the target.
+ * It links the C search with the generated tables.c (the data the target
+ * links) and with build.c (the generator's code).
  *
+ *  0. The linked tables are byte-for-byte what build.c produces now, so
+ *     tables.c (and tables.s, written in the same run) is not stale.
  *  1. Oracle: breadth-first search over all 3,674,160 states with the
  *     reference model (unrank, quarter_turn, rank, exactly as solver.c).
  *     It shares no table with the target code. 3.5 MiB of distances plus a
@@ -7,7 +11,8 @@
  *  2. Tables: on every state and every face, the target's ranking matches
  *     solver.c's, and moving the coordinates matches moving the cube. This
  *     is the condition that makes each PDB a lower bound.
- *  3. PDBs: every abstract state reached; maximum and histogram.
+ *  3. PDBs: every abstract state reached; maximum and histogram; the
+ *     solved entry of each PDB is 0.
  *  4. Heuristic: admissible and consistent on every state, 0 only at the
  *     goal; and a count showing why the PDBs must be merged with max.
  *  5. IDA* on states [lo, hi): the length equals the oracle distance and
@@ -20,7 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ida.h"
+#include "build.h"
+#include "search.h"
 
 enum { BUDGET = 250000 };
 
@@ -102,7 +108,7 @@ static int node_eq(node_t a, node_t b)
 
 static void print_memory(void)
 {
-    printf("target tables (the data that would live in RV32I memory):\n");
+    printf("target tables (read-only data linked into the RV32I program):\n");
     printf("  perm_q  [3][5040] u16  %6zu B\n", sizeof perm_q);
     printf("  ori_q   [3][729]  u16  %6zu B\n", sizeof ori_q);
     printf("  perm_h  [5040]    u8   %6zu B\n", sizeof perm_h);
@@ -110,13 +116,36 @@ static void print_memory(void)
 #if CORNER_PDB
     printf("  c4pos_q [3][840]  u16  %6zu B\n", sizeof c4pos_q);
     printf("  c4tw_q  [3][840]  u8   %6zu B\n", sizeof c4tw_q);
-    printf("  add81   [81][81]  u8   %6zu B\n", sizeof add81);
-    printf("  c4_h    [68040]   u8   %6zu B\n", sizeof c4_h);
+    printf("  add81   [81][128] u8   %6zu B\n", sizeof add81);
+    printf("  c4_h    [81][840] u8   %6zu B\n", sizeof c4_h);
+    printf("  c4_row  [81] ptr       %6d B (RV32)\n", C4ORI * 4);
 #endif
-    printf("  total                  %6zu B (%.1f KiB)\n", ida_table_bytes(),
-           ida_table_bytes() / 1024.0);
+    printf("  total                  %6u B (%.1f KiB of 128 KiB)\n",
+           (unsigned) tables_bytes, tables_bytes / 1024.0);
     printf("host only (verify.c): oracle %u B + BFS queue %zu B\n\n",
            (unsigned) STATES, (size_t) STATES * sizeof(uint32_t));
+}
+
+/* ---- 0. Linked tables match the generator ---- */
+
+static void check_fresh(void)
+{
+    static tables_t t;
+    build_tables(&t);
+    int stale = memcmp(t.perm_q, perm_q, sizeof perm_q) ||
+                memcmp(t.ori_q, ori_q, sizeof ori_q) ||
+                memcmp(t.perm_h, perm_h, sizeof perm_h) ||
+                memcmp(t.ori_h, ori_h, sizeof ori_h);
+#if CORNER_PDB
+    stale = stale || memcmp(t.c4pos_q, c4pos_q, sizeof c4pos_q) ||
+            memcmp(t.c4tw_q, c4tw_q, sizeof c4tw_q) ||
+            memcmp(t.add81, add81, sizeof add81) ||
+            memcmp(t.c4_h, c4_h, sizeof c4_h);
+    for (int co = 0; co < C4ORI; co++)
+        stale = stale || c4_row[co] != c4_h[co];
+#endif
+    CHECK(!stale, "tables.c differs from what build.c produces: run make tables");
+    printf("0. linked tables = fresh build.c output, byte for byte\n");
 }
 
 /* ---- 1. Oracle ---- */
@@ -217,6 +246,17 @@ static void pdb_stats(const char *name, const uint8_t *h, uint32_t n)
     putchar('\n');
 }
 
+static void check_solved_entries(void)
+{
+    int ok = perm_h[0] == 0 && ori_h[0] == 0;
+#if CORNER_PDB
+    ok = ok && c4_row[0][c4_rank(c4_cubies)] == 0;
+#endif
+    CHECK(ok, "a PDB entry for the solved state is not 0");
+    printf("3. solved entries: perm_h[0] = ori_h[0]%s = 0\n",
+           CORNER_PDB ? " = c4_h[0][goal]" : "");
+}
+
 /* ---- 4. Admissibility and consistency, exhaustively ---- */
 
 static void check_heuristic(void)
@@ -233,7 +273,7 @@ static void check_heuristic(void)
         over_p += hp > d;
         over_o += ho > d;
 #if CORNER_PDB
-        over_c += c4_h[(uint32_t) n.cp * C4ORI + n.co] > d;
+        over_c += c4_row[n.co][n.cp] > d;
 #endif
         over_sum += hp + ho > d;
         zero_elsewhere += h == 0 && r != 0;
@@ -350,15 +390,16 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    ida_init();
     print_memory();
+    check_fresh();
     build_oracle();
     check_tables();
     pdb_stats("perm", perm_h, PERMS);
     pdb_stats("orient", ori_h, ORIS);
 #if CORNER_PDB
-    pdb_stats("corner4", c4_h, C4SIZE);
+    pdb_stats("corner4", &c4_h[0][0], C4ORI * C4POS);
 #endif
+    check_solved_entries();
     check_heuristic();
     check_ida(lo, hi, step);
 

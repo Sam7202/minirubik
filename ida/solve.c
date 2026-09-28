@@ -1,10 +1,13 @@
-/* solve.c - command-line front end, same input format as solver.c:
+/* solve.c - host command-line front end for the C search, same input
+ * format as solver.c:
  *   ./solve PPPPPPPOOOOOOO
  * The solution goes to stdout; search cost and table size go to stderr.
+ * It links search.c with the generated tables.c, the same data tables.s
+ * gives the assembly, so its node counts are the reference for the target.
  */
 #include <stdio.h>
 
-#include "ida.h"
+#include "search.h"
 
 /* Same validation as solver.c: exactly 14 digits, a permutation of 1..7,
  * twists 1..3 whose (digit - 1) sum is a multiple of 3. */
@@ -39,7 +42,6 @@ int main(int argc, char **argv)
                 argc > 0 && argv[0] ? argv[0] : "solve");
         return 2;
     }
-    ida_init();
     int len = ida_solve(node_from_state(&s), moves);
     if (len < 0) {
         fprintf(stderr, "no solution within %d moves\n", MAX_DEPTH);
@@ -50,6 +52,6 @@ int main(int argc, char **argv)
     putchar('\n');
     fprintf(stderr, "length %d, expanded %lu, generated %lu, tables %zu B\n",
             len, (unsigned long) ida_expanded, (unsigned long) ida_generated,
-            ida_table_bytes());
+            (size_t) tables_bytes);
     return fflush(stdout) || ferror(stdout) ? 1 : 0;
 }

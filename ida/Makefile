@@ -1,30 +1,55 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Wpedantic
-DEPS := ida.c ida.h cube.h
 
-# solve / verify:        h = max(permutation PDB, orientation PDB)
-# solve_c4 / verify_c4:  also max with the 4-corner PDB (CORNER_PDB=1)
-all: solve verify solve_c4 verify_c4
+# PDB=3 (default): h = max(perm, orient, 4-corner PDB).
+# PDB=2: perm and orient PDBs only; files get a "2" suffix.
+PDB ?= 3
+ifeq ($(PDB),2)
+DEFS := -DCORNER_PDB=0
+SUF := 2
+else
+DEFS := -DCORNER_PDB=1
+SUF :=
+endif
 
-solve: solve.c $(DEPS)
-	$(CC) $(CFLAGS) solve.c ida.c -o $@
+T := tables$(SUF)
+TABLES := $(T).c $(T).s $(T)_ripes.s
+HDRS := cube.h tables.h search.h build.h
 
-verify: verify.c $(DEPS)
-	$(CC) $(CFLAGS) verify.c ida.c -o $@
+all: gen_tables$(SUF) $(TABLES) solve$(SUF) verify$(SUF)
 
-solve_c4: solve.c $(DEPS)
-	$(CC) $(CFLAGS) -DCORNER_PDB=1 solve.c ida.c -o $@
+# Host generator: build.c fills the tables, gen_tables.c writes them out.
+gen_tables$(SUF): gen_tables.c build.c $(HDRS)
+	$(CC) $(CFLAGS) $(DEFS) gen_tables.c build.c -o $@
 
-verify_c4: verify.c $(DEPS)
-	$(CC) $(CFLAGS) -DCORNER_PDB=1 verify.c ida.c -o $@
+# One run writes tables.c (C), tables.s (.rodata) and tables_ripes.s (.data
+# for Ripes' built-in assembler), so the three always hold the same bytes.
+tables: $(TABLES)
 
-# Quick run: table and heuristic checks on every state, IDA* on every 97th
-# state. Drop the arguments to run IDA* on all 3,674,160 states.
-quick: verify verify_c4
-	./verify 0 3674160 97
-	./verify_c4 0 3674160 97
+$(T).c: gen_tables$(SUF)
+	./gen_tables$(SUF) $(TABLES)
+
+$(T).s $(T)_ripes.s: $(T).c
+	@test -f $@ || ./gen_tables$(SUF) $(TABLES)
+
+# Host programs linking the target search with the generated tables.
+solve$(SUF): solve.c search.c $(T).c $(HDRS)
+	$(CC) $(CFLAGS) $(DEFS) solve.c search.c $(T).c -o $@
+
+verify$(SUF): verify.c search.c build.c $(T).c $(HDRS)
+	$(CC) $(CFLAGS) $(DEFS) verify.c search.c build.c $(T).c -o $@
+
+# Table checks on every state, IDA* on every 97th state: about 10 seconds.
+quick: verify$(SUF)
+	./verify$(SUF) 0 3674160 97
+
+# Everything on every state: about 2 minutes (PDB=3) or 5 minutes (PDB=2)
+# on one core.
+check: verify$(SUF)
+	./verify$(SUF)
 
 clean:
-	$(RM) solve verify solve_c4 verify_c4
+	$(RM) gen_tables gen_tables2 solve solve2 verify verify2
+	$(RM) tables.c tables.s tables_ripes.s tables2.c tables2.s tables2_ripes.s
 
-.PHONY: all quick clean
+.PHONY: all tables quick check clean
