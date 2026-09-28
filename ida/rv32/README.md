@@ -8,7 +8,9 @@ host                               Ripes（target）                      host
 
 - 表格在 host 產生（上層 `make tables`），以 const 資料放在 `.rodata`，target **不建表、不複製**，直接讀。
 - `search_rv32.c` 直接 `#include "../search.c"` 和 `"../tables.c"`，在 Ripes 跑的就是上層那份搜尋碼。
-- `check_ripes.c` 不用 search.c 的任何東西：用 `cube.h` 的參考模型重播每個解，並跑完整 BFS 確認步數是最短。
+- `check_ripes.c` 用 `cube.h` 的參考模型重播每個解，並跑完整 BFS 確認步數是最短（這兩項不用 search.c）；
+  另外對同一個狀態跑 host 版 `search.c`，要求解法字串、展開數、產生數**逐一相同**（索引錯一格時步數常常還對，但節點數會變）。
+  所以 target 程式的輸出必須是 `STATE -> moves  [len N, expanded E, generated G]` 格式。
 
 ## 用法
 
@@ -44,7 +46,7 @@ cd baseline && make run                      # 原版 solver.c 當比較基準�
 | 檔案 | 說明 |
 | :--- | :--- |
 | `search_rv32.c` | target 單一編譯單元：freestanding runtime + `../search.c` + `../tables.c` + 測資 |
-| `check_ripes.c` | host 驗證器，讀 Ripes 輸出 |
+| `check_ripes.c` | host 驗證器，讀 Ripes 輸出；連結 host 版 `../search.c` 當節點數參考 |
 | `link.ld` | 給 Ripes 用的平坦佈局，`_start` 必須是 image 第一個 byte |
 | `baseline/` | 原版 minirubik `solver.c` 一行不改搬上 Ripes，見其 README |
 

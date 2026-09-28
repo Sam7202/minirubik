@@ -7,7 +7,13 @@
  *      gives the solved cube;
  *   2. the number of moves is the true optimal distance, from a full BFS
  *      over all 3,674,160 states (same model and rank as solver.c);
- *   3. N printed by the target equals the number of moves.
+ *   3. N printed by the target equals the number of moves;
+ *   4. the moves and the expanded/generated node counts equal those of the
+ *      host build of ../search.c on the same state. The search order is
+ *      fixed (tables.h), so any indexing slip on the target that still
+ *      happens to give an optimal length almost always changes the counts.
+ * Checks 1-2 use only cube.h and a BFS; check 4 uses search.c as the
+ * reference, so it compares the target against the host build.
  * It also requires the target's "tables N B" banner and exit code 0.
  * Exit status 0 only if every check passes.
  */
@@ -16,6 +22,7 @@
 #include <string.h>
 
 #include "../cube.h"
+#include "../search.h"
 
 static uint32_t rank_state(const state_t *s) /* identical to solver.c */
 {
@@ -121,21 +128,33 @@ int main(void)
         }
         uint32_t start = rank_state(&s);
 
-        /* Moves run up to "[" (or "(solved)"); "[len N" follows. */
+        /* Host reference: the same search on the same state. */
+        uint8_t ref_moves[MAX_DEPTH];
+        int ref_len = ida_solve(node_from_state(&s), ref_moves);
+        uint32_t ref_exp = ida_expanded, ref_gen = ida_generated;
+
+        /* Moves run up to "[" (or "(solved)");
+         * "[len N, expanded E, generated G]" follows. */
         char *bracket = strchr(arrow, '[');
-        int printed_len = bracket ? atoi(bracket + 5) : -1;
+        int printed_len = -1;
+        unsigned long exp = 0, gen = 0;
+        int have_counts = bracket &&
+            sscanf(bracket, "[len %d, expanded %lu, generated %lu",
+                   &printed_len, &exp, &gen) == 3;
         if (bracket)
             *bracket = '\0';
+        uint8_t got_moves[MAX_DEPTH];
         int len = 0, bad_token = 0;
         for (char *tok = strtok(arrow + 4, " \n"); tok;
              tok = strtok(NULL, " \n")) {
             if (!strcmp(tok, "(solved)"))
                 continue;
             int m = move_index(tok);
-            if (m < 0) {
+            if (m < 0 || len == MAX_DEPTH) {
                 bad_token = 1;
                 break;
             }
+            got_moves[len] = (uint8_t) m;
             for (int t = 0; t <= m % 3; t++)
                 s = quarter_turn(s, m / 3);
             len++;
@@ -143,11 +162,20 @@ int main(void)
 
         int solved = rank_state(&s) == 0;
         int optimal = len == dist[start];
-        int ok = !bad_token && solved && optimal && printed_len == len;
-        printf("%s %s: %d moves, optimal %d%s%s%s\n", ok ? "ok  " : "FAIL",
-               name, len, dist[start], solved ? "" : ", NOT SOLVED",
+        int same_moves = !bad_token && len == ref_len &&
+                         !memcmp(got_moves, ref_moves, (size_t) len);
+        int same_counts = have_counts && exp == ref_exp && gen == ref_gen;
+        int ok = !bad_token && solved && optimal && printed_len == len &&
+                 same_moves && same_counts;
+        printf("%s %s: %d moves, optimal %d, expanded %lu/%u, generated "
+               "%lu/%u (target/host)%s%s%s%s%s%s\n",
+               ok ? "ok  " : "FAIL", name, len, dist[start], exp, ref_exp,
+               gen, ref_gen, solved ? "" : ", NOT SOLVED",
                bad_token ? ", bad move token" : "",
-               printed_len == len ? "" : ", len field mismatch");
+               printed_len == len ? "" : ", len field mismatch",
+               have_counts ? "" : ", no node counts in output",
+               same_moves ? "" : ", moves differ from host search.c",
+               !have_counts || same_counts ? "" : ", node counts differ");
         checked++;
         failed += !ok;
     }

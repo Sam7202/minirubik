@@ -61,8 +61,10 @@ run: search_rv32.bin
 
 # Step 3 on the host: replay each Ripes answer on the reference cube and
 # compare its length with a full BFS. ripes_out.txt keeps the raw log.
-check_ripes: check_ripes.c ../cube.h
-	$(CC) $(HOSTCFLAGS) check_ripes.c -o $@
+# Links the host build of the same search and tables as the reference for
+# the node-count check; rebuilt every time so PDB applies.
+check_ripes: check_ripes.c $(TABLES) $(DEPS)
+	$(CC) $(HOSTCFLAGS) $(DEFS) check_ripes.c ../search.c $(TABLES) -o $@
 
 verify: search_rv32.bin check_ripes
 	$(RIPESRUN) --iret > ripes_out.txt 2>&1
@@ -76,4 +78,4 @@ size: search_rv32.elf
 clean:
 	$(RM) search_rv32.elf search_rv32.bin check_ripes ripes_out.txt
 
-.PHONY: all run verify size clean search_rv32.elf
+.PHONY: all run verify size clean search_rv32.elf check_ripes
