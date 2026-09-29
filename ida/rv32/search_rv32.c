@@ -4,10 +4,12 @@
  *   Ripes: this program, ../search.c unmodified, solves cases[]
  *   host: check_ripes replays every answer and checks it is optimal
  *
- * One translation unit, freestanding: Ripes loads a flat binary and
- * implements the Linux-style ecall ABI, while the xPack newlib uses
- * semihosting, so the libc pieces needed are provided here. Nothing is
- * built or copied at run time; the search reads the linked tables directly.
+ * One translation unit, freestanding: Ripes loads a flat binary, has no
+ * command line (the input is cases[]) and implements Linux-style ecalls,
+ * which this file calls directly. newlib and libgcc are not linked, so no
+ * multiply or divide can hide in library code and --iret is almost all
+ * search. Nothing is built or copied at run time; the search reads the
+ * linked tables directly.
  */
 #include <stddef.h>
 #include <stdint.h>

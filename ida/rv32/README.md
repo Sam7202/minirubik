@@ -52,13 +52,22 @@ cd baseline && make run                      # 原版 solver.c 當比較基準�
 | `link.ld` | 給 Ripes 用的平坦佈局，`_start` 必須是 image 第一個 byte |
 | `baseline/` | 原版 minirubik `solver.c` 一行不改搬上 Ripes，見其 README |
 
-## Ripes 的三個坑
+## 在 Ripes 上跑 C 要注意的事
 
 1. **CLI 的 `-t c` 是壞的**：不會呼叫 compiler，安靜地跑出 0 cycles。C 要自己先編好。
-2. **`-t bin` 吃 raw binary**：整包載到位址 0、從 0 開始執行，不看 ELF header。所以要
-   `objcopy -O binary`，而且 `_start` 要排在最前面（`link.ld` 的 `.text.init`）。
-3. **xPack newlib 走 semihosting，Ripes 只認 Linux 風格 ecall**：所以用 `-nostdlib`，自己寫
-   `_start`、`sys_write`（a7=64）、`exit`（a7=93），`memset`/`memcpy` 也自己補。
+2. **沒有命令列參數**：程式拿不到 `argv`，輸入只能編進 image（這裡是 `cases[]`，
+   baseline 是 `-DCASE`）。原封不動的 solver.c 在 Ripes 上只會印 usage、exit 2。
+3. **大塊 `malloc` 會失敗**：newlib 的 `malloc` 透過 `brk` 要記憶體，在這個 Ripes build 上要不到
+   solver.c 那兩塊（3.5 MB、14 MB），`build_table` 回傳 NULL。所以 baseline 自己寫 bump allocator；
+   `search_rv32.c` 完全不用 heap。
+4. **`-t bin` 吃 raw binary**：整包載到位址 0、從 0 開始執行，不看 ELF header。所以要
+   `objcopy -O binary`，而且 `_start` 要排在最前面（`link.ld` 的 `.text.init`）。這個 Ripes build
+   也有 `-t elf`，可以直接吃 ELF；Makefile 用 `.bin` 是因為兩種 build 都能跑。
+
+`printf` 本身沒問題：xPack newlib 的系統呼叫是 Linux 風格的 ecall（write 是 a7=64），Ripes 有實作，
+原封不動的 solver.c 印得出 usage。這裡仍然用 `-nostdlib`、自己寫 `_start`、`sys_write`、`exit`，
+理由是量測：不連 newlib 和 libgcc，就不會有藏起來的乘除法（newlib 的 `printf` 會做除法），
+輸出的程式碼也很小，`--iret` 幾乎全是搜尋本身。
 
 另外，`RV32_ISS` 只算指令（CPI 固定 1），比 `RV32_5S` 快約兩個數量級；要 pipeline 數據才用 `RV32_5S`。
 

@@ -1,10 +1,13 @@
 /* baseline_rv32.c - the original minirubik solver.c, unmodified, on Ripes (baseline for v2).
  *
- * solver.c is compiled against the stub headers in include/ and its main is
- * renamed to solver_main; this file supplies the few libc pieces it uses
- * (a bump allocator for its two mallocs, %s-only printf, Ripes ecalls).
- * Each run solves one scramble, given with -DCASE='"..."', and so - exactly
- * like the host binary - rebuilds the full 3,674,160-state BFS table first.
+ * Two things are required to run solver.c on Ripes at all: Ripes has no
+ * command line, so the input is given with -DCASE='"..."' and passed as
+ * argv; and newlib's malloc, which grows the heap with brk, cannot get the
+ * 3.5 MB table and the 14 MB queue there, so malloc is a bump allocator.
+ * The rest (stub headers in include/, %s-only printf, Ripes ecalls) only
+ * keeps newlib out of the image so that --iret is solver.c's own work.
+ * main is renamed to solver_main. Each run - exactly like the host binary -
+ * rebuilds the full 3,674,160-state BFS table first.
  */
 #include <stdarg.h>
 #include <stddef.h>
