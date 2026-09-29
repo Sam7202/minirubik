@@ -54,7 +54,11 @@ cd baseline && make run                      # 原版 solver.c 當比較基準�
 
 ## 在 Ripes 上跑 C 要注意的事
 
-1. **CLI 的 `-t c` 是壞的**：不會呼叫 compiler，安靜地跑出 0 cycles。C 要自己先編好。
+1. **`-t c` 用的是 Ripes 設定裡的 compiler 和參數**：它會呼叫 Settings 裡的 `compiler_path`
+   （這台是 xPack `riscv-none-elf-gcc`），參數是全域設定的 `compiler_args`（目前 `-O0 -g`），
+   連 newlib 一起連結。每次跑沒辦法指定 `-O2`、自己的 linker script 或外殼，
+   所以量測用的 image 都在 Makefile 裡自己編好，再用 `-t bin` 載入。
+   （沒設定 compiler 時 `-t c` 會安靜地跑出 0 cycles。）
 2. **沒有命令列參數**：程式拿不到 `argv`，輸入只能編進 image（這裡是 `cases[]`，
    baseline 是 `-DCASE`）。原封不動的 solver.c 在 Ripes 上只會印 usage、exit 2。
 3. **大塊 `malloc` 會失敗**：newlib 的 `malloc` 透過 `brk` 要記憶體，在這個 Ripes build 上要不到
