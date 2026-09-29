@@ -50,17 +50,26 @@ static void put_str(const char *s)
     sys_write(s, n);
 }
 
+/* Decimal without divide: each digit is how many times its power of ten
+ * can be subtracted (at most 9 times). */
 static void put_uint(uint32_t v)
 {
-    char buf[11];
-    int i = 11;
-    if (!v)
-        buf[--i] = '0';
-    while (v) {
-        buf[--i] = (char) ('0' + v % 10);
-        v /= 10;
+    static const uint32_t pow10[10] = {1000000000, 100000000, 10000000,
+                                       1000000,    100000,    10000,
+                                       1000,       100,       10,
+                                       1};
+    char buf[10];
+    int n = 0;
+    for (int k = 0; k < 10; k++) {
+        char d = '0';
+        while (v >= pow10[k]) {
+            v -= pow10[k];
+            d++;
+        }
+        if (n || d != '0' || k == 9)
+            buf[n++] = d;
     }
-    sys_write(buf + i, 11 - i);
+    sys_write(buf, n);
 }
 
 /* ---- the target search and the host-generated tables, unmodified ---- */
@@ -74,6 +83,8 @@ static void put_uint(uint32_t v)
 
 /* ---- input: same 14-digit format as solve.c ---- */
 
+/* The twist sum is kept mod 3 as it is read: both values are at most 2, so
+ * one conditional subtraction replaces the modulo. */
 static int parse_state(const char *in, state_t *s)
 {
     unsigned seen = 0, sum = 0;
@@ -91,8 +102,10 @@ static int parse_state(const char *in, state_t *s)
         s->p[i] = (uint8_t) p;
         s->o[i] = (uint8_t) o;
         sum += o;
+        if (sum >= 3)
+            sum -= 3;
     }
-    return sum % 3 == 0;
+    return sum == 0;
 }
 
 /* Scrambles to solve; override with -DCASES='"...","..."'. */

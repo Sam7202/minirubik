@@ -7,6 +7,8 @@ host                               Ripes（target）                      host
 ```
 
 - 表格在 host 產生（上層 `make tables`），以 const 資料放在 `.rodata`，target **不建表、不複製**，直接讀。
+- 連結時**不加 `-lgcc`**：RV32I 沒有乘除指令，程式裡只要出現 gcc 無法化成 shift/add 的乘、除、取餘數，
+  就會變成呼叫 `__mulsi3`/`__udivsi3`…，連結直接失敗，不會偷偷混進去。
 - `search_rv32.c` 直接 `#include "../search.c"` 和 `"../tables.c"`，在 Ripes 跑的就是上層那份搜尋碼。
 - `check_ripes.c` 用 `cube.h` 的參考模型重播每個解，並跑完整 BFS 確認步數是最短（這兩項不用 search.c）；
   另外對同一個狀態跑 host 版 `search.c`，要求解法字串、展開數、產生數**逐一相同**（索引錯一格時步數常常還對，但節點數會變）。

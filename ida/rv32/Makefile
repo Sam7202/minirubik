@@ -48,9 +48,12 @@ all: search_rv32.bin
 	$(MAKE) -C .. tables PDB=2
 
 # Step 2: the Ripes image. Rebuilt every time so CASES/PDB/ARCH apply.
+# No -lgcc: RV32I has no multiply or divide, so any a * b, a / b or a % b
+# that gcc cannot turn into shifts becomes a call to __mulsi3/__udivsi3...
+# and must fail to link rather than slip in.
 search_rv32.elf: search_rv32.c $(TABLES) link.ld $(DEPS)
 	$(RVCC) $(RVCFLAGS) $(DEFS) $(if $(CASES),-DCASES='$(CASES)') \
-	  -T link.ld search_rv32.c -o $@ -lgcc
+	  -T link.ld search_rv32.c -o $@
 	@$(RVSIZE) $@
 
 search_rv32.bin: search_rv32.elf
