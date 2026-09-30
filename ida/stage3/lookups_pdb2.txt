@@ -1,0 +1,5 @@
+PDB=2, 2644 distance-11 states, 4 table reads per generated node
+            mean         max
+expanded     34438.9      106635
+generated   206618.2      639792
+lookups     826472.8     2559168
