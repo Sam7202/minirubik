@@ -17,7 +17,7 @@
 
 ```sh
 export PATH="$HOME/Library/xPacks/riscv-none-elf-gcc/current/bin:$PATH"
-make run                          # rv32i,README 的範例,RV32_ISS 約 3 分 40 秒
+make run                          # rv32i,README 的範例,RV32_ISS 約 4–5 分鐘
 make run CASE=54721631111111
 make run ARCH=rv32im ISAEXTS=M
 ```

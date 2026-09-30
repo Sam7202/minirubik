@@ -39,11 +39,12 @@ solve$(SUF): solve.c search.c $(T).c $(HDRS)
 verify$(SUF): verify.c search.c build.c $(T).c $(HDRS)
 	$(CC) $(CFLAGS) $(DEFS) verify.c search.c build.c $(T).c -o $@
 
-# Table checks on every state, IDA* on every 97th state: about 10 seconds.
+# Table checks on every state, IDA* on every 97th state: about 2 seconds
+# (PDB=3) or 3 seconds (PDB=2).
 quick: verify$(SUF)
 	./verify$(SUF) 0 3674160 97
 
-# Everything on every state: about 2 minutes (PDB=3) or 5 minutes (PDB=2)
+# Everything on every state: about 40 seconds (PDB=3) or 3 minutes (PDB=2)
 # on one core.
 check: verify$(SUF)
 	./verify$(SUF)

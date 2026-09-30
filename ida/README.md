@@ -31,8 +31,8 @@ build.c + gen_tables.c ──make tables──▶ tables.s ───────
 make                       # 產生三個表格檔，編出 gen_tables、solve、verify
 make tables                # 只重新產生表格檔
 ./solve 21345671111111     # 解法印到 stdout；長度、展開數、產生數印到 stderr
-make quick                 # 全部狀態的表格檢查，IDA* 每 97 個抽 1 個，約 10 秒
-make check                 # 全部 3,674,160 個狀態，約 2 分鐘
+make quick                 # 全部狀態的表格檢查，IDA* 每 97 個抽 1 個，約 2 秒
+make check                 # 全部 3,674,160 個狀態，約 40 秒（PDB=2 約 3 分鐘）
 make PDB=2                 # 只用兩張 PDB 的版本，檔名多一個 2（tables2.s、verify2…）
 cd rv32 && make verify         # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
 cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
@@ -59,7 +59,7 @@ cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
 | H2：每張 PDB 都填滿、最大值、已解狀態那格是 0 | verify 第 3 步 |
 | H1：h 在全部狀態 admissible、consistent | verify 第 4 步 |
 | H3：C 版搜尋在全部狀態都找到最短解 | verify 第 5 步 |
-| T5：解法在參考模型上重播後確實解開 | verify 第 5 步 |
+| 解法在參考模型上重播後確實解開（host；清單的 T5 要在 Ripes 上另外做） | verify 第 5 步 |
 | tables.s 與 tables.c 內容相同 | rv32i-measure：progS 與 progB 的結果逐一相同 |
 
 所有表都是一格一 byte（或 halfword），沒有 nibble 打包，所以沒有 H4 要檢查的奇偶格存取。
@@ -91,6 +91,7 @@ cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
 | .rodata + .data + .bss | 126,742 B | 40,426 B |
 | 最壞展開 | 19,797 | 106,635 |
 | 最壞產生 | 118,767 | 639,792 |
+| 展開數超過 250,000 的狀態（清單的節點預算） | 0 | 0 |
 | 產生數超過 250,000 的狀態 | 0 | 428 |
 | RV32I 指令：最壞的一次執行 | 8,365,306 | 20,600,447 |
 | RV32I 指令：d=11 平均每次查詢 | 2,105,812 | 6,646,013 |
