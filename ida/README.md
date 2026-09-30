@@ -22,6 +22,7 @@ build.c + gen_tables.c ──make tables──▶ tables.s ───────
 | `verify.c` | 只在 host | 窮舉驗證表和搜尋 |
 | `rv32/` | host＋Ripes | **Ripes 實測**：search.c＋tables.c 編成 RV32 在 Ripes 跑 `--iret`，再回 host 驗證（`make verify`）；`baseline/` 是原版 solver.c |
 | `rv32i-measure/` | host | 把 search.c 編成 RV32I、數指令數，並確認 tables.s 和 tables.c 內容相同 |
+| `asm/` | host＋Ripes | **Stage 4 手寫 RV32I 組語版**：和 search.c 同一個搜尋，在 Ripes 上跑並自我驗證，見 `asm/README.md` |
 
 `tables.c`、`tables.s`、`tables_ripes.s` 由 `make` 產生，不要手改。
 
