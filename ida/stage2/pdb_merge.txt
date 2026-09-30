@@ -1,0 +1,26 @@
+1. perm_h = ori_h = 1 on 18 states
+   distance  c4_h  states  example
+          1     1       4  12356741112323
+          5     5       2  16543271112323
+          6     5       1  15246371112323
+          6     6       5  12367451112323
+          7     7       2  12367452313211
+          8     5       1  25314671112323
+          8     6       3  12356742313211
+   p after R, o after B: perm_h 1, ori_h 1, c4_h 5; 25314671112323, distance 8, optimal R' B2 R B' R B' R B
+2. IDA* with h = perm_h + ori_h: longer than optimal on 3058483 of 3674159 unsolved states (83.2%)
+   moves too long: 1:1025178 2:1260015 3:649243 4:114764 5:9169 6:114
+   distance   longer / states
+          1        0 /       9
+          2        0 /      54
+          3        4 /     321
+          4      361 /    1847
+          5     4649 /    9992
+          6    30137 /   50136
+          7   165620 /  227536
+          8   725025 /  870072
+          9  1645442 / 1887748
+         10   485857 /  623800
+         11     1388 /    2644
+   first at the smallest distance: 14732561112323, distance 3, optimal B' D2 B2; sum starts at 3 + 1 and returns B D2 B2 D2
+./stage2/pdb_merge  23.78s user 0.01s system 98% cpu 24.136 total

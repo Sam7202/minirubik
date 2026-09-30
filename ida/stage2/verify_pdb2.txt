@@ -1,0 +1,38 @@
+./verify2
+target tables (read-only data linked into the RV32I program):
+  perm_q  [3][5040] u16   30240 B
+  ori_q   [3][729]  u16    4374 B
+  perm_h  [5040]    u8     5040 B
+  ori_h   [729]     u8      729 B
+  total                   40383 B (39.4 KiB of 128 KiB)
+host only (verify.c): oracle 3674160 B + BFS queue 14696640 B
+
+0. linked tables = fresh build.c output, byte for byte
+1. oracle: 3674160 states, depth histogram matches report.md
+2. tables: ranking = solver.c on every state; coordinate moves = cube moves on all 3674160 x 3 quarter turns
+3. perm    PDB:  5040/5040 reached, max 7, histogram: 1 9 54 297 1233 2157 1244 45
+3. orient  PDB:   729/729 reached, max 6, histogram: 1 2 12 64 274 336 40
+3. solved entries: perm_h[0] = ori_h[0] = 0
+4. h = max of PDBs: admissible and consistent on all states, 0 only at the goal; mean h 5.144 vs mean distance 8.756
+   distance - h: 0:17108 1:83910 2:377894 3:1107100 4:1416753 5:591000 6:77589 7:2738 8:68
+   (for contrast, h_perm + h_orient overestimates on 1919570 states, so the merge must be max)
+5. IDA* on states [0, 3674160) step 1 ...
+   3674160 states: every length equals the oracle distance, every solution replays to solved
+   depth   states   mean expanded   max expanded   max generated
+       0        1             0.0              0               0
+       1        9             1.0              1               9
+       2       54             2.0              2              15
+       3      321             3.0              5              31
+       4     1847             4.5             23             144
+       5     9992             8.2            105             641
+       6    50136            23.2            241            1442
+       7   227536            94.8            655            3940
+       8   870072           477.9           2459           14751
+       9  1887748          2317.9           9263           55578
+      10   623800          8023.9          41720          250318
+      11     2644         34438.9         106635          639792
+   worst: 54721631111111 (distance 11) expanded 106635, generated 639792
+   states over 250000: 0 by expanded, 428 by generated
+
+all checks passed
+make check PDB=2  186.42s user 0.36s system 99% cpu 3:07.16 total
