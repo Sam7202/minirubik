@@ -77,8 +77,8 @@ cd baseline && make run                      # 原版 solver.c 當比較基準�
 
 另外，`RV32_ISS` 只算指令（CPI 固定 1），比 `RV32_5S` 快約 70 倍（note 2.3 的寫入迴圈實測）；要 pipeline 數據才用 `RV32_5S`。
 
-## 與 rv32i-measure/ 的分工
+## 與 asm/、stage4/ 的關係
 
-`../rv32i-measure/` 用 clang＋ld.lld 和自製模擬器 `emu.c`，一次量全部 2,644 個 distance-11 狀態、並確認
-`tables.s` 和 `tables.c` 內容相同；需要支援 RISC-V 的 clang 和 ld.lld（Apple clang 沒有）。
-作業要求的 Ripes `--iret` 實測用這個目錄。
+這個目錄是 Stage 4 的 **gcc 對照組**（tag `stage3-c` 的 C 版）。`../asm/` 的手寫組語版借用這裡的 `link.ld`
+和 `check_ripes`。`../stage4/batch.py` 把這裡的 C 版和組語版都在 Ripes 上跑完全部 2,644 個 distance-11
+狀態；C 版每個狀態各編譯一次，因為寫死的輸入會被 gcc 在編譯時就檢查完（見 `../stage4/README.md`）。

@@ -4,9 +4,9 @@
 
 ```
 host（你的電腦）                                          target（Ripes）
-build.c + gen_tables.c ──make tables──▶ tables.s ───────▶ 資料段（唯讀使用）
-                                        tables_ripes.s    你的組語 IDA*，對照 search.c
-                                        tables.c ──▶ solve / verify / rv32i-measure
+build.c + gen_tables.c ──make tables──▶ tables.s ───────▶ asm/：手寫組語 IDA*（GNU as 連結）
+                                        tables_ripes.s    同一份資料，給 Ripes 內建組譯器
+                                        tables.c ──▶ solve / verify / rv32/（gcc 對照組）
 ```
 
 ## 檔案
@@ -21,8 +21,8 @@ build.c + gen_tables.c ──make tables──▶ tables.s ───────
 | `solve.c` | host | C 版搜尋的命令列介面，輸入格式與 solver.c 相同 |
 | `verify.c` | 只在 host | 窮舉驗證表和搜尋 |
 | `rv32/` | host＋Ripes | **Ripes 實測**：search.c＋tables.c 編成 RV32 在 Ripes 跑 `--iret`，再回 host 驗證（`make verify`）；`baseline/` 是原版 solver.c |
-| `rv32i-measure/` | host | 把 search.c 編成 RV32I、數指令數，並確認 tables.s 和 tables.c 內容相同 |
 | `asm/` | host＋Ripes | **Stage 4 手寫 RV32I 組語版**：和 search.c 同一個搜尋，在 Ripes 上跑並自我驗證，見 `asm/README.md` |
+| `stage1/`…`stage4/` | host＋Ripes | note 各節的原始數據和產生它們的程式；`stage4/` 把全部 2,644 個 distance-11 狀態在 Ripes 上各跑一次 |
 
 `tables.c`、`tables.s`、`tables_ripes.s` 由 `make` 產生，不要手改。
 
@@ -36,7 +36,8 @@ make quick                 # 全部狀態的表格檢查，IDA* 每 97 個抽 1 
 make check                 # 全部 3,674,160 個狀態，約 40 秒（PDB=2 約 3 分鐘）
 make PDB=2                 # 只用兩張 PDB 的版本，檔名多一個 2（tables2.s、verify2…）
 cd rv32 && make verify         # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
-cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
+cd asm && make verify          # 組語版：Ripes 實測並回 host 驗證（見 asm/README.md）
+stage4/batch.py asm > stage4/asm.csv   # 全部 2,644 個 distance-11 狀態在 Ripes 上各跑一次（見 stage4/README.md）
 ```
 
 ## 表格檔
@@ -61,7 +62,9 @@ cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
 | H1：h 在全部狀態 admissible、consistent | verify 第 4 步 |
 | H3：C 版搜尋在全部狀態都找到最短解 | verify 第 5 步 |
 | 解法在參考模型上重播後確實解開（host；清單的 T5 要在 Ripes 上另外做） | verify 第 5 步 |
-| tables.s 與 tables.c 內容相同 | rv32i-measure：progS 與 progB 的結果逐一相同 |
+| tables.s 與 tables.c 內容相同 | stage4：asm/ 連結 tables.s，全部 2,644 個 distance-11 狀態的解法和節點數，都和連結 tables.c 的 host search.c 相同（check_ripes） |
+| T5：解法在 Ripes 上重播後確實解開 | asm/ 程式內自我驗證；stage4 全部 2,644 個 distance-11 狀態都通過 |
+| T6：`21345671111111` 回傳 11 步最短解 | asm/：`make run CASE=21345671111111 EXPECT=11` |
 
 所有表都是一格一 byte（或 halfword），沒有 nibble 打包，所以沒有 H4 要檢查的奇偶格存取。
 
@@ -85,21 +88,21 @@ cd rv32i-measure && make run   # 需要 clang、ld.lld；約 3 分鐘
 
 ## 結果
 
-節點數是 host 上全部 3,674,160 個狀態的結果。指令數和資料量是 rv32i-measure 在全部 2,644 個 distance-11 狀態上量到的，最壞的狀態都在這一組裡。
+節點數是 host 上的結果。指令數是 Ripes `RV32_ISS` 的 `--iret`，量的是 `rv32/`（gcc -O2 編譯 search.c，tag `stage3-c`），全部 2,644 個 distance-11 狀態各跑一次（`stage4/`）。組語版的數字見 `asm/README.md`。
 
 | | PDB=3（預設） | PDB=2 |
 | :--- | ---: | ---: |
-| .rodata + .data + .bss | 126,742 B | 40,426 B |
+| .rodata + .data + .bss（`rv32/` 的 image） | 127,292 B | 40,904 B |
 | 最壞展開 | 19,797 | 106,635 |
 | 最壞產生 | 118,767 | 639,792 |
 | 展開數超過 250,000 的狀態（清單的節點預算） | 0 | 0 |
 | 產生數超過 250,000 的狀態 | 0 | 428 |
-| RV32I 指令：最壞的一次執行 | 8,365,306 | 20,600,447 |
-| RV32I 指令：d=11 平均每次查詢 | 2,105,812 | 6,646,013 |
+| RV32I 指令：最壞的一次執行 | 8,066,912（`51342763312223`） | 26,815,803（`54721631111111`） |
+| RV32I 指令：d=11 平均每次查詢 | 2,040,094.5 | 8,668,650.3 |
 
 - **展開**：通過 bound 檢查、產生了子節點的節點。**產生**：每一步轉動算出一個子節點算一次。兩者都是所有 IDA* 迭代的累加。
-- 指令數是 clang -O2 編出來的 C，不是手寫組語。表不在 runtime 建，所以一次執行 ＝ 開機 95 條 ＋ 一次查詢。
-- 搜尋迴圈裡沒有乘法、除法或取餘數（編出來的 dfs 沒有呼叫 `__mulsi3` 之類的函式）。組語版也要避免：先前量過，把 ×81 交給通用乘法常式時，最壞那次查詢從約 809 萬條變成約 1,915 萬條，節點數完全一樣。
+- 指令數包含 C 外殼的開機和印出結果（已解好的狀態約 1,750 條）。每個狀態的輸入在編譯時寫死，gcc 會在編譯時就做完輸入檢查（見 `stage4/README.md`）。
+- 搜尋迴圈裡沒有乘法、除法或取餘數；`rv32/` 連結時不加 libgcc，出現就會連結失敗。改用 `__mulsi3` 算 `co × 81` 的代價見 note 第 4.2 節。
 
 ## 注意
 
