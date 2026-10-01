@@ -13,6 +13,8 @@
 #    the face's table rows and the pruning limit stay in registers.
 #  - A child is pruned as soon as one PDB exceeds limit = bound - g - 1,
 #    4-corner PDB first; the maximum of the three is never formed.
+#    EARLY_PRUNE=0 (make PRUNE=max) forms it as search.c's node_h() does,
+#    to measure what the early exit alone is worth.
 #  - No multiply or divide: ranks are Horner sums with x2 to x6 done as shifts
 #    and adds, and numbers are printed with Ripes' print-integer call.
 #
@@ -24,6 +26,9 @@
 
     .ifndef MOD3_BRANCHLESS
     .equ MOD3_BRANCHLESS, 0     # 1: twist sums mod 3 without a branch
+    .endif
+    .ifndef EARLY_PRUNE
+    .equ EARLY_PRUNE, 1         # 0: h = max of the three PDBs, as search.c
     .endif
 
     .equ CUBIES, 7
@@ -461,6 +466,7 @@ ida_solve:
     add   t0, t0, t1
     lbu   a3, 0(t0)             # co = add81[co][twist]
     addi  s10, s10, 1
+    .if EARLY_PRUNE
     slli  t0, a3, 2             # the 4-corner PDB first: it prunes most
     add   t0, s4, t0
     lw    t0, 0(t0)
@@ -473,6 +479,24 @@ ida_solve:
     add   t0, s2, a1
     lbu   t0, 0(t0)
     bltu  s9, t0, .Lnext_turn
+    .else
+    add   t0, s1, a0            # h = max(perm_h, ori_h, c4_h), in the order
+    lbu   t0, 0(t0)             # of search.c's node_h()
+    add   t1, s2, a1
+    lbu   t1, 0(t1)
+    bgeu  t0, t1, .Lmax_ori
+    mv    t0, t1
+.Lmax_ori:
+    slli  t1, a3, 2
+    add   t1, s4, t1
+    lw    t1, 0(t1)
+    add   t1, t1, a2
+    lbu   t1, 0(t1)
+    bgeu  t0, t1, .Lmax_c4
+    mv    t0, t1
+.Lmax_c4:
+    bltu  s9, t0, .Lnext_turn   # g + 1 + h > bound
+    .endif
     or    t0, a0, a1
     beqz  t0, .Lfound           # p = o = 0: solved
     sb    a4, 8(s0)             # go down into this child

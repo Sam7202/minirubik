@@ -16,7 +16,9 @@ Run from ida/, with the xPack toolchain on PATH, after
   stage4/batch.py rv32           > stage4/rv32_pdb3.csv
   stage4/batch.py rv32 --pdb 2   > stage4/rv32_pdb2.csv
 Options: -j N parallel runs (default: CPU count); --raw FILE keeps every
-run's output, which rv32/check_ripes can check. The summary goes to stderr.
+run's output, which rv32/check_ripes can check; --make VAR=VALUE passes a
+build option, e.g. `stage4/batch.py asm --make PRUNE=max`. The summary goes
+to stderr.
 """
 import argparse
 import concurrent.futures
@@ -31,10 +33,10 @@ PLACEHOLDER = 'XXXXXXXXXXXXXX'
 LIMIT = 50_000_000  # instructions per distance-11 state, the pass mark
 
 
-def asm_template():
+def asm_template(options):
     """Assemble the image once with the placeholder input."""
     subprocess.run(['make', '-s', '-C', 'asm', 'solve.bin',
-                    f'CASE={PLACEHOLDER}', 'EXPECT=11'],
+                    f'CASE={PLACEHOLDER}', 'EXPECT=11', *options],
                    check=True, stdout=subprocess.DEVNULL)
     with open('asm/solve.bin', 'rb') as f:
         template = f.read()
@@ -51,10 +53,10 @@ def asm_image(template, state, path):
         f.write(data)
 
 
-def rv32_commands(pdb):
+def rv32_commands(pdb, options):
     """The compile and objcopy commands make would run for one case."""
     out = subprocess.run(['make', '-n', '-C', 'rv32', 'search_rv32.bin',
-                          f'PDB={pdb}', f'CASES="{PLACEHOLDER}"'],
+                          f'PDB={pdb}', f'CASES="{PLACEHOLDER}"', *options],
                          capture_output=True, text=True, check=True).stdout
     lines = out.replace('\\\n', ' ').splitlines()
     cmds = [l for l in lines if 'gcc ' in l or 'objcopy ' in l]
@@ -106,16 +108,17 @@ def main():
     ap.add_argument('-j', type=int, default=os.cpu_count())
     ap.add_argument('--states', default='stage4/d11.txt')
     ap.add_argument('--raw')
+    ap.add_argument('--make', action='append', default=[])
     args = ap.parse_args()
 
     with open(args.states) as f:
         states = [s.strip() for s in f if s.strip()]
     if args.kind == 'asm':
-        template = asm_template()
+        template = asm_template(args.make)
         def make_image(state, path):
             asm_image(template, state, path)
     else:
-        cmds = rv32_commands(args.pdb)
+        cmds = rv32_commands(args.pdb, args.make)
         def make_image(state, path):
             rv32_image(cmds, state, path)
 
@@ -144,6 +147,8 @@ def main():
     worst = max(results, key=lambda r: r['iret'])
     best = min(results, key=lambda r: r['iret'])
     name = 'asm' if args.kind == 'asm' else f'rv32 PDB={args.pdb}'
+    if args.make:
+        name += ' ' + ' '.join(args.make)
     print(f'{name}: {len(results)} states, {len(bad)} failed, '
           f'{sum(i > LIMIT for i in irets)} over {LIMIT:,} instructions\n'
           f'  mean {sum(irets) / len(irets):,.1f}  '

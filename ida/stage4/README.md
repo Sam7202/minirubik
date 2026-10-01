@@ -10,6 +10,7 @@ PDBs. Host: Apple M1, 8 cores; Ripes v2.2.6-106-g5b8a616.
 | `d11.c` | prints the 2,644 distance-11 states, one per line (input of `batch.py`) |
 | `batch.py` | builds one image per state, runs them on Ripes in parallel, writes a CSV |
 | `asm.csv` | `../asm`, the hand-written RV32I search |
+| `asm_max.csv` | `../asm` built with `PRUNE=max`: h is the maximum of the three PDBs, as in `search.c` |
 | `rv32_pdb3.csv` | `../rv32`, gcc -O2, three PDBs |
 | `rv32_pdb2.csv` | `../rv32`, gcc -O2, two PDBs |
 
@@ -20,20 +21,26 @@ check itself).
 
 ## Results
 
-| | asm | gcc, three PDBs | gcc, two PDBs |
-| :--- | ---: | ---: | ---: |
-| States failed | 0 | 0 | 0 |
-| Over 5 x 10^7 instructions | 0 | 0 | 0 |
-| Mean `--iret` | 1,084,723.0 | 2,040,094.5 | 8,668,650.3 |
-| Max `--iret` | 4,296,273 | 8,066,912 | 26,815,803 |
-| State at the max | `51342763312223` | `51342763312223` | `54721631111111` |
-| Min `--iret` | 519,419 | 977,198 | 5,910,179 |
-| Wall clock, 8 runs at a time | 2 min 45 s | 6 min 29 s | 10 min 51 s |
+| | asm | asm, `PRUNE=max` | gcc, three PDBs | gcc, two PDBs |
+| :--- | ---: | ---: | ---: | ---: |
+| States failed | 0 | 0 | 0 | 0 |
+| Over 5 x 10^7 instructions | 0 | 0 | 0 | 0 |
+| Mean `--iret` | 1,084,723.0 | 1,242,566.3 | 2,040,094.5 | 8,668,650.3 |
+| Max `--iret` | 4,296,273 | 4,900,912 | 8,066,912 | 26,815,803 |
+| State at the max | `51342763312223` | `51342763312223` | `51342763312223` | `54721631111111` |
+| Min `--iret` | 519,419 | 596,253 | 977,198 | 5,910,179 |
+| Wall clock, 8 runs at a time | 2 min 45 s | 2 min 44 s | 6 min 29 s | 10 min 51 s |
+
+`PRUNE=max` evaluates the bound test as the C does (all three PDBs, then
+their maximum), so against gcc it differs only in how the code is written:
+it needs 61% of gcc's instructions on average. The early exit of the default
+build saves another 157,843.3 on average (17% of the total saving) and
+604,639 in the worst query (16%).
 
 A state fails if its length is not 11, its exit code is not 0, or (asm) its
 own check does not print `ok`. Then, on the host, `../rv32/check_ripes`
 checked every answer of each batch (replay, optimal length from a full BFS,
-moves and node counts equal to the host search): 2,644 of 2,644 in all three.
+moves and node counts equal to the host search): 2,644 of 2,644 in all four.
 
 ## Commands
 
@@ -43,10 +50,12 @@ From `ida/`, with the xPack toolchain on PATH:
 cc -O2 -std=c99 -Wall -Wextra -Wpedantic -DCORNER_PDB=1 -I. stage4/d11.c tables.c -o stage4/d11
 stage4/d11 > stage4/d11.txt
 stage4/batch.py asm --raw asm_raw.txt > stage4/asm.csv
+stage4/batch.py asm --make PRUNE=max --raw asm_max_raw.txt > stage4/asm_max.csv
 stage4/batch.py rv32 --raw pdb3_raw.txt > stage4/rv32_pdb3.csv
 stage4/batch.py rv32 --pdb 2 --raw pdb2_raw.txt > stage4/rv32_pdb2.csv
 make -C rv32 check_ripes
 rv32/check_ripes < asm_raw.txt
+rv32/check_ripes < asm_max_raw.txt
 rv32/check_ripes < pdb3_raw.txt
 make -C rv32 check_ripes PDB=2
 rv32/check_ripes < pdb2_raw.txt

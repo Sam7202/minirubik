@@ -4,6 +4,7 @@
 #   make verify              run, then check every answer on the host
 #   make run CASE=21345671111111 EXPECT=11    one state, for its own count
 #   make run MOD3=branchless twist sums mod 3 without a branch
+#   make run PRUNE=max       h = max of the PDBs as in search.c, no early exit
 #   make run PROC=RV32_5S    pipeline model (much slower)
 #   make size                section sizes of the image
 
@@ -15,6 +16,7 @@ RVSIZE    ?= riscv-none-elf-size
 PROC    ?= RV32_ISS
 TIMEOUT ?= 600000
 MOD3    ?= branch
+PRUNE   ?= early
 CASE    ?=
 EXPECT  ?= 255
 
@@ -22,6 +24,9 @@ EXPECT  ?= 255
 ASFLAGS := -march=rv32i -mabi=ilp32
 ifeq ($(MOD3),branchless)
 ASFLAGS += --defsym MOD3_BRANCHLESS=1
+endif
+ifeq ($(PRUNE),max)
+ASFLAGS += --defsym EARLY_PRUNE=0
 endif
 
 ifeq ($(CASE),)
@@ -44,7 +49,7 @@ tables.o: ../tables.s
 case_one.s: FORCE
 	printf '    .section .rodata\n    .globl cases\ncases:\n    .ascii "%s"\n    .byte %s, 0\n    .byte 0\n' '$(CASE)' '$(EXPECT)' > $@
 
-# Rebuilt every time so CASE, EXPECT and MOD3 apply. --no-relax: every la
+# Rebuilt every time so CASE, EXPECT, MOD3 and PRUNE apply. --no-relax: every la
 # stays auipc + addi as written, so instruction counts do not depend on where
 # the linker places symbols (relaxing la to one instruction when an address
 # fits in 12 bits made two builds differ by 18,693 instructions), and no
