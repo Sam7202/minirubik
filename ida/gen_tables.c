@@ -1,6 +1,6 @@
 /* gen_tables.c - host generator. Builds every table with build.c and writes
  *
- *   tables.c        C definitions, linked by solve, verify, rv32/ and stage*/
+ *   tables.c        C definitions, linked by solve, verify, rv32/ and stage[234]/
  *   tables.s        RV32I data in .section .rodata (GNU as), linked by asm/
  *   tables_ripes.s  the same data in .data, for Ripes' built-in assembler,
  *                   which knows only .text, .data and .bss
