@@ -35,9 +35,12 @@ make tables                # 只重新產生表格檔
 make quick                 # 全部狀態的表格檢查，IDA* 每 97 個抽 1 個，約 2 秒
 make check                 # 全部 3,674,160 個狀態，約 40 秒（PDB=2 約 3 分鐘）
 make PDB=2                 # 只用兩張 PDB 的版本，檔名多一個 2（tables2.s、verify2…）
-cd rv32 && make verify         # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
-cd asm && make verify          # 組語版：Ripes 實測並回 host 驗證（見 asm/README.md）
-stage4/batch.py asm > stage4/asm.csv   # 全部 2,644 個 distance-11 狀態在 Ripes 上各跑一次（見 stage4/README.md）
+make -C rv32 verify        # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
+make -C asm verify         # 組語版：Ripes 實測並回 host 驗證（見 asm/README.md）
+make -C asm verify PROC=RV32_5S   # 同上，改在 5 級 pipeline 上跑（T7）
+cc -O2 -std=c99 -Wall -Wextra -Wpedantic -DCORNER_PDB=1 -I. stage4/d11.c tables.c -o stage4/d11
+stage4/d11 > stage4/d11.txt           # batch.py 的輸入：2,644 個 distance-11 狀態
+stage4/batch.py asm > stage4/asm.csv  # 每個狀態在 Ripes 上各跑一次（見 stage4/README.md）
 ```
 
 ## 表格檔

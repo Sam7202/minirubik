@@ -41,6 +41,7 @@
     .equ ORI_Q_ROW, 1458
     .equ C4POS_Q_ROW, 1680
     .equ C4TW_Q_ROW, 840
+    .equ C4_H_BYTES, 68040      # c4_h: 81 rows of 840
     .equ C4_ROW_BYTES, 324      # c4_row, the last table: 81 pointers
 
     # Ripes environment calls.
@@ -130,10 +131,10 @@ c4pos:       .zero 12           # pos[4], tw[4], r[4] of cubies 0..3
     .globl _start
 _start:
     la    sp, __stack_top
-    PRINT banner                # "tables N B": bytes of the linked tables
-    la    a0, perm_q
-    la    t0, c4_row
-    sub   a0, t0, a0
+    PRINT banner                # "tables N B": bytes of the linked tables:
+    la    a0, perm_q            # perm_q (the first) to the end of c4_h,
+    la    t0, c4_h + C4_H_BYTES # plus c4_row; the padding that aligns
+    sub   a0, t0, a0            # c4_row to a word is not a table byte
     addi  a0, a0, C4_ROW_BYTES
     jal   print_int
     PRINT bytes_txt
