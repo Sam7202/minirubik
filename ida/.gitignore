@@ -15,6 +15,10 @@ solve_c4
 verify
 verify2
 verify_c4
+solve_rec
+solve2_rec
+verify_rec
+verify2_rec
 pdb_merge
 lookups
 lookups2

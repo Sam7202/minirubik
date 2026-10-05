@@ -17,7 +17,7 @@ build.c + gen_tables.c ──make tables──▶ tables.s ───────
 | `cube.h` | 共用 | 魔方模型；`source`/`twist` 取自 solver.c，rank 編碼相同 |
 | `build.c`、`build.h` | 只在 host | 建出所有表（逐層掃描的 BFS） |
 | `gen_tables.c` | 只在 host | 產生器：呼叫 build.c，寫出 `tables.c`、`tables.s`、`tables_ripes.s` |
-| `search.c`、`search.h` | target | IDA* 搜尋，只讀表、不建表；組語版的對照 |
+| `search.c`、`search.h` | target | IDA* 搜尋，只讀表、不建表；組語版的對照。深度優先搜尋預設寫成迴圈，`DFS=recursive` 換回 tag `stage3-c` 的遞迴版 |
 | `solve.c` | host | C 版搜尋的命令列介面，輸入格式與 solver.c 相同 |
 | `verify.c` | 只在 host | 窮舉驗證表和搜尋 |
 | `rv32/` | host＋Ripes | **Ripes 實測**：search.c＋tables.c 編成 RV32 在 Ripes 跑 `--iret`，再回 host 驗證（`make verify`）；`baseline/` 是原版 solver.c |
@@ -35,6 +35,7 @@ make tables                # 只重新產生表格檔
 make quick                 # 全部狀態的表格檢查，IDA* 每 97 個抽 1 個，約 2 秒
 make check                 # 全部 3,674,160 個狀態，約 40 秒（PDB=2 約 3 分鐘）
 make PDB=2                 # 只用兩張 PDB 的版本，檔名多一個 2（tables2.s、verify2…）
+make check DFS=recursive   # 改用遞迴版 dfs()（tag stage3-c），執行檔多 _rec（verify_rec…）
 make -C rv32 verify        # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
 make -C asm verify         # 組語版：Ripes 實測並回 host 驗證（見 asm/README.md）
 make -C asm verify PROC=RV32_5S   # 同上，改在 5 級 pipeline 上跑（T7）
@@ -91,20 +92,20 @@ stage4/batch.py asm > stage4/asm.csv  # 每個狀態在 Ripes 上各跑一次（
 
 ## 結果
 
-節點數和查表次數是 host 上的結果：d=11 的平均和最壞見 `stage3/`，超過預算的狀態數是 `make check` 跑全部狀態的結果（`stage2/`）。指令數是 Ripes `RV32_ISS` 的 `--iret`，量的是 `rv32/`（gcc -O2 編譯 search.c，tag `stage3-c`），全部 2,644 個 distance-11 狀態各跑一次（`stage4/`）。組語版的數字見 `asm/README.md`。
+節點數和查表次數是 host 上的結果：d=11 的平均和最壞見 `stage3/`，超過預算的狀態數是 `make check` 跑全部狀態的結果（`stage2/`）。指令數是 Ripes `RV32_ISS` 的 `--iret`，量的是 `rv32/`（gcc -O2 編譯 search.c 預設的迴圈版），全部 2,644 個 distance-11 狀態各跑一次（`stage4/`）。遞迴版（tag `stage3-c`）的數字見 `stage4/README.md`，組語版的數字見 `asm/README.md`。
 
 | | PDB=3（預設） | PDB=2 |
 | :--- | ---: | ---: |
-| .rodata + .data + .bss（`rv32/` 的 image） | 127,292 B | 40,904 B |
+| .rodata + .data + .bss（`rv32/` 的 image） | 127,512 B | 41,080 B |
 | 展開：d=11 平均／最壞 | 4,994.7 / 19,797 | 34,438.9 / 106,635 |
 | 查表次數：d=11 平均／最壞 | 269,554.8 / 1,068,903 | 826,472.8 / 2,559,168 |
 | 展開數超過 250,000 的狀態（清單的節點預算） | 0 | 0 |
-| RV32I 指令：最壞的一次執行 | 8,066,912（`51342763312223`） | 26,815,803（`54721631111111`） |
-| RV32I 指令：d=11 平均每次查詢 | 2,040,094.5 | 8,668,650.3 |
+| RV32I 指令：最壞的一次執行 | 6,226,078（`51342763312223`） | 20,844,421（`54721631111111`） |
+| RV32I 指令：d=11 平均每次查詢 | 1,575,885.6 | 6,740,242.4 |
 
 - **展開**：通過 bound 檢查、產生了子節點的節點。**產生**：每一步轉動算出一個子節點算一次。兩者都是所有 IDA* 迭代的累加。每產生一個節點固定讀 9 張表（PDB=2 是 4 張），所以查表次數 = 產生數 × 9（× 4），見 `stage3/README.md`。
 - 清單的節點預算看的是展開數。用產生數算的話，PDB=2 有 428 個狀態超過 250,000，PDB=3 沒有；實際指令數兩者都在 5 × 10⁷ 以內。
-- 指令數包含 C 外殼的開機和印出結果（已解好的狀態約 1,750 條）。每個狀態的輸入在編譯時寫死，gcc 會在編譯時就做完輸入檢查（見 `stage4/README.md`）。
+- 指令數包含 C 外殼的開機和印出結果（已解好的狀態約 1,968 條）。每個狀態的輸入在編譯時寫死，gcc 會在編譯時就做完輸入檢查（見 `stage4/README.md`）。
 - 搜尋迴圈裡沒有乘法、除法或取餘數；`rv32/` 連結時不加 libgcc，出現就會連結失敗。改用 `__mulsi3` 算 `co × 81` 的代價見 note 第 4.2 節。
 
 ## 注意

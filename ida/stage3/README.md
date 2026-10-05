@@ -1,7 +1,10 @@
 # stage3 — C-level optimization
 
-Raw data for note section 4. The C search at this point (tag `stage3-c`) is
-the gcc reference for Stage 4.
+Raw data for note section 4. Tag `stage3-c` marks the C search after
+sections 4.1 to 4.4, with a recursive `dfs()`. Section 4.5 then writes the
+search as a loop over a stack of levels (`DFS_LOOP`, now the default); that
+is the gcc reference for Stage 4. Both forms visit the same nodes, so every
+count below holds for both.
 
 | File | What |
 | :--- | :--- |

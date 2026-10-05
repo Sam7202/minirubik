@@ -12,11 +12,23 @@ DEFS := -DCORNER_PDB=1
 SUF :=
 endif
 
+# DFS=loop (default): dfs() is a loop over a stack of levels.
+# DFS=recursive: the recursive dfs() of tag stage3-c; solve and verify get
+# a "_rec" suffix (verify_rec, verify2_rec...). The tables are the same.
+DFS ?= loop
+ifeq ($(DFS),recursive)
+DEFS += -DDFS_LOOP=0
+RSUF := _rec
+else
+RSUF :=
+endif
+
 T := tables$(SUF)
 TABLES := $(T).c $(T).s $(T)_ripes.s
 HDRS := cube.h tables.h search.h build.h
+P := $(SUF)$(RSUF)
 
-all: gen_tables$(SUF) $(TABLES) solve$(SUF) verify$(SUF)
+all: gen_tables$(SUF) $(TABLES) solve$(P) verify$(P)
 
 # Host generator: build.c fills the tables, gen_tables.c writes them out.
 gen_tables$(SUF): gen_tables.c build.c $(HDRS)
@@ -33,24 +45,25 @@ $(T).s $(T)_ripes.s: $(T).c
 	@test -f $@ || ./gen_tables$(SUF) $(TABLES)
 
 # Host programs linking the target search with the generated tables.
-solve$(SUF): solve.c search.c $(T).c $(HDRS)
+solve$(P): solve.c search.c $(T).c $(HDRS)
 	$(CC) $(CFLAGS) $(DEFS) solve.c search.c $(T).c -o $@
 
-verify$(SUF): verify.c search.c build.c $(T).c $(HDRS)
+verify$(P): verify.c search.c build.c $(T).c $(HDRS)
 	$(CC) $(CFLAGS) $(DEFS) verify.c search.c build.c $(T).c -o $@
 
 # Table checks on every state, IDA* on every 97th state: about 2 seconds
 # (PDB=3) or 3 seconds (PDB=2).
-quick: verify$(SUF)
-	./verify$(SUF) 0 3674160 97
+quick: verify$(P)
+	./verify$(P) 0 3674160 97
 
 # Everything on every state: about 40 seconds (PDB=3) or 3 minutes (PDB=2)
 # on one core.
-check: verify$(SUF)
-	./verify$(SUF)
+check: verify$(P)
+	./verify$(P)
 
 clean:
 	$(RM) gen_tables gen_tables2 solve solve2 verify verify2
+	$(RM) solve_rec solve2_rec verify_rec verify2_rec
 	$(RM) tables.c tables.s tables_ripes.s tables2.c tables2.s tables2_ripes.s
 
 .PHONY: all tables quick check clean

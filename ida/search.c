@@ -89,12 +89,16 @@ uint8_t node_h(node_t n)
 
 /* ---- IDA* ---- */
 
+#ifndef DFS_LOOP
+#define DFS_LOOP 1 /* 0: the recursive dfs() of tag stage3-c */
+#endif
+
 static uint8_t *path, bound, found_len;
 
-/* Expand n, which sits at depth g, has g + h(n) <= bound and is not solved.
- * Each child is tested here, before any call: most children fail the
- * bound test in the last iteration, and rejecting them in the parent saves
- * a call, a stack frame and a return per rejected child.
+/* dfs() searches below n, which sits at depth g, has g + h(n) <= bound and
+ * is not solved. Each child is tested in the parent: most children fail the
+ * bound test in the last iteration, and rejecting them there saves going
+ * down a level (a call, in the recursive form) for each.
  *
  * last points at the rows of the face turned to reach n. Turning that face
  * again is never optimal (two turns of one face merge into one move or
@@ -103,6 +107,72 @@ static uint8_t *path, bound, found_len;
  * pruned that way.
  * Since g + h(n) <= bound, h(n) >= 1 and bound <= MAX_DEPTH, g stays below
  * MAX_DEPTH and path[g] is in range. */
+#if DFS_LOOP
+/* The search is a loop over a stack of levels, as in the assembly.
+ * levels[g] holds the node at depth g, the face that produced it, and the
+ * loop state to resume once the child searched below it is done. Going
+ * down saves the loop state, pushes the child and starts again at "down";
+ * backing up pops, restores the loop state and re-enters the inner loop at
+ * "up", where the recursive form returns from its call. Children, counts
+ * and answers are those of the recursive form. */
+typedef struct {
+    node_t n;
+    const face_rows_t *last; /* NULL at the root */
+    const face_rows_t *r;    /* face, move index and turn of the child */
+    uint8_t m, t;            /* searched below this level */
+} level_t;
+
+static level_t levels[MAX_DEPTH];
+
+static int dfs(node_t n, uint8_t g, const face_rows_t *last)
+{
+    level_t *L = levels; /* ida_solve starts at g = 0 */
+    const face_rows_t *r;
+    uint8_t m, t;
+    node_t c;
+
+    L->n = n;
+    L->last = last;
+down:
+    ida_expanded++;
+    for (r = rows, m = 0; r != rows + 3; r++, m = (uint8_t) (m + 3)) {
+        if (r == L->last)
+            continue;
+        c = L->n;
+        for (t = 0; t < 3; t++) {
+            c = step(c, r); /* 90, then 180, then 270 degrees */
+            ida_generated++;
+            if (g + 1 + node_h(c) > bound)
+                continue;
+            path[g] = (uint8_t) (m + t);
+            if (c.p == 0 && c.o == 0) { /* both coordinates solved */
+                found_len = (uint8_t) (g + 1);
+                return 1;
+            }
+            L->r = r; /* the call: save the loop state, push c */
+            L->m = m;
+            L->t = t;
+            L++;
+            L->n = c;
+            L->last = r;
+            g++;
+            goto down;
+        up:; /* the return: resume with the next turn */
+        }
+    }
+    if (L == levels)
+        return 0;
+    L--;
+    g--;
+    r = L->r;
+    m = L->m;
+    t = L->t;
+    c = L[1].n; /* the child just searched: one more turn gives the next */
+    goto up;
+}
+#else
+/* The recursive form (tag stage3-c): a call, a stack frame and a return
+ * per expanded node. */
 static int dfs(node_t n, uint8_t g, const face_rows_t *last)
 {
     ida_expanded++;
@@ -127,6 +197,7 @@ static int dfs(node_t n, uint8_t g, const face_rows_t *last)
     }
     return 0;
 }
+#endif
 
 int ida_solve(node_t start, uint8_t moves[MAX_DEPTH])
 {

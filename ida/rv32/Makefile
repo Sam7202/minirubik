@@ -4,6 +4,7 @@
 #   make run              just run on Ripes and print --iret
 #   make run CASES='"21345671111111"'     one scramble, for a per-query count
 #   make run PDB=2        two PDBs only (../tables2.c)
+#   make run DFS=recursive   the recursive dfs() of tag stage3-c
 #   make run ARCH=rv32im ISAEXTS=M
 #   make run PROC=RV32_5S                pipeline model (much slower)
 #   make size             .text / .rodata / .bss of the Ripes image
@@ -22,6 +23,7 @@ ISAEXTS   ?=
 TIMEOUT   ?= 600000
 PDB       ?= 3
 CASES     ?=
+DFS       ?= loop
 
 ifeq ($(PDB),2)
 DEFS   := -DCORNER_PDB=0
@@ -29,6 +31,13 @@ TABLES := ../tables2.c
 else
 DEFS   := -DCORNER_PDB=1
 TABLES := ../tables.c
+endif
+
+# DFS: loop (default) or recursive, for the Ripes image only. check_ripes
+# always links the default search; both forms give the same moves and node
+# counts on every state (make check and make check DFS=recursive in ..).
+ifeq ($(DFS),recursive)
+RVDEFS := -DDFS_LOOP=0
 endif
 
 HOSTCFLAGS ?= -O2 -std=c99 -Wall -Wextra -Wpedantic
@@ -52,7 +61,7 @@ all: search_rv32.bin
 # that gcc cannot turn into shifts becomes a call to __mulsi3/__udivsi3...
 # and must fail to link rather than slip in.
 search_rv32.elf: search_rv32.c $(TABLES) link.ld $(DEPS)
-	$(RVCC) $(RVCFLAGS) $(DEFS) $(if $(CASES),-DCASES='$(CASES)') \
+	$(RVCC) $(RVCFLAGS) $(DEFS) $(RVDEFS) $(if $(CASES),-DCASES='$(CASES)') \
 	  -T link.ld search_rv32.c -o $@
 	@$(RVSIZE) $@
 
