@@ -17,8 +17,9 @@ RVSIZE    ?= riscv-none-elf-size
 RVOBJCOPY ?= riscv-none-elf-objcopy
 ARCH      ?= rv32i
 ABI       ?= ilp32
-PROC      ?= RV32_ISS      # functional ISA sim: ~120x faster wall-clock.
-                          # Use RV32_5S for pipeline cycle counts.
+PROC      ?= RV32_ISS      # functional ISA sim: about 70x faster than RV32_5S
+                          # on note 2.3's write loop. Use RV32_5S for
+                          # pipeline cycle counts.
 ISAEXTS   ?=
 TIMEOUT   ?= 600000
 PDB       ?= 3

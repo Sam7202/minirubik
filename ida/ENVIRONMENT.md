@@ -26,11 +26,11 @@ Environment calls checked on this build, from a `-t asm` program:
 
 | a7 | Effect |
 | :---: | :--- |
-| 1 | print integer in a0 |
-| 4 | print string at a0 |
+| 1 | print integer in a0; asm/ prints its numbers this way |
+| 4 | print string at a0, and its terminating NUL too, which breaks parsing the output on the host; so no harness uses it |
 | 11 | print character in a0 |
 | 10 | exit |
-| 64 | Linux-style write(fd=a0, buf=a1, len=a2); used by the C harnesses |
+| 64 | Linux-style write(fd=a0, buf=a1, len=a2); the C harnesses and asm/ print strings with it |
 | 93 | exit with code a0 |
 
 ## Toolchain

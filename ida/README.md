@@ -46,7 +46,7 @@ stage4/batch.py asm > stage4/asm.csv  # 每個狀態在 Ripes 上各跑一次（
 
 ## 表格檔
 
-- `tables.s`：放在 `.section .rodata`，給 GNU as／LLVM 組譯成 ELF 再載入 Ripes。
+- `tables.s`：放在 `.section .rodata`，給 GNU as 組譯；`asm/` 把它和組語程式連結成 ELF，再轉成 binary 載入 Ripes。
 - `tables_ripes.s`：同樣的資料放在 `.data`。Ripes 內建的組譯器只認得 `.text`、`.data`、`.bss`（見 Ripes 原始碼 `src/assembler/gnudirectives.cpp`）。128 KiB 預算把 .rodata 和 .data 一起算，放哪一段都一樣。程式只讀不寫。
 - 排列順序是 halfword 表 → byte 表 → `c4_row`。`c4_row` 的內容是 `.word c4_h+840` 這類位址；Ripes 只看得到前面已經定義過的標籤，所以 `c4_h` 必須排在它前面。在 Ripes 裡可以把整個檔案接在你的程式後面，指令裡往後引用標籤沒有問題。
 - 開頭的 `.align 4` 在 Ripes 是 4 byte，在 GNU as 是 2⁴ = 16 byte；兩種都讓表從 word 邊界開始。
@@ -69,6 +69,7 @@ stage4/batch.py asm > stage4/asm.csv  # 每個狀態在 Ripes 上各跑一次（
 | tables.s 與 tables.c 內容相同 | stage4：asm/ 連結 tables.s，全部 2,644 個 distance-11 狀態的解法和節點數，都和連結 tables.c 的 host search.c 相同（check_ripes） |
 | T5：解法在 Ripes 上重播後確實解開 | asm/ 程式內自我驗證；stage4 全部 2,644 個 distance-11 狀態都通過 |
 | T6：`21345671111111` 回傳 11 步最短解 | asm/：`make run CASE=21345671111111 EXPECT=11` |
+| T7：測資在 `RV32_ISS` 和 pipeline 模型上都重現 | asm/：`make -C asm verify PROC=RV32_5S`，10 組在 5 級 pipeline 上全部通過（`check_ripes`），ISS 上也是；助教給的狀態拿到後要補 |
 
 所有表都是一格一 byte（或 halfword），沒有 nibble 打包，所以沒有 H4 要檢查的奇偶格存取。
 
