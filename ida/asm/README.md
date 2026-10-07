@@ -1,121 +1,71 @@
-# asm — 手寫 RV32I 組語版的 IDA*
+# asm: the RV32I assembly search
 
-`solve.s` 是 Stage 4 的組語版搜尋。演算法、座標、表格和搜尋順序都跟 `../search.c` 相同（以 `../tables.h` 為準），所以解法字串和展開數、產生數會跟 C 版逐一相同，可以直接用 `../rv32/check_ripes` 在 host 上驗證。
+`solve.s` runs the IDA* of `../search.c` with the same tables, coordinates
+and move order (`../tables.h`), so its moves and node counts equal the C
+search's on every state, and `../rv32/check_ripes` checks it on the host.
+Design, measurements and the LED mapping are in sections 5, 8 and 9 of the
+[HackMD note](https://hackmd.io/9dUgyW8_SDy4kCeemswbow).
 
-## 和 C 版不同的地方
+What differs from the C:
 
-- **沒有遞迴，而且狀態都在暫存器**：深度優先搜尋是一個迴圈，搭配固定大小的層級陣列 `slots`（11 層，每層 16 bytes）。只有往下走進子節點時才寫入陣列；試同一個節點的子節點時，座標、這個 face 的四個表格列、剪枝上限都留在暫存器裡。C 的預設版本也是同樣的迴圈結構（`levels[]`），但 gcc 每個子節點都從記憶體重讀四個表格列指標、讀寫一次記憶體裡的計數器。
-- **剪枝時提早結束**：上限 `limit = bound - g - 1` 每層只算一次；先查 4 角塊 PDB，任何一張超過上限就剪掉，不算 max。剪掉的節點跟算 max 完全相同，只是少讀表。`PRUNE=max` 會改成跟 `search.c` 的 `node_h()` 一樣先算 max，用來量這一項單獨的效果。
-- **沒有乘除法**：rank 用 Horner 法，×2 到 ×6 都用 shift 加 add（例如 ×6 = (x << 1) + (x << 2)、×5 = (x << 2) + x）。印數字用 Ripes 的 print-integer 呼叫，不用自己除以 10。`-march=rv32i` 組譯，原始碼裡如果出現 `mul`、`div`、`rem` 會直接組譯失敗。
-- **程式內自我驗證**：每組測資解完之後，用 `cube.h` 的直接模型（`source`、`twist`）重播解法，確認回到解好的狀態（T5），並比對步數和 `cases.s` 裡的期望值（T6）。exit code 是失敗的測資數。
+- One loop over a fixed array of levels (`slots`); while the children of a
+  node are tried, the child's coordinates, the face's table rows and the
+  pruning limit stay in registers.
+- A child is dropped at the first PDB over `limit = bound - g - 1`, 4-corner
+  PDB first. `PRUNE=max` forms the maximum first, as `node_h()` does.
+- No multiply or divide: `-march=rv32i` makes one an assembly error.
+- Each answer is replayed on `cube.h`'s direct model and its length compared
+  with the expected one (T5, T6); the exit code counts the failures.
 
-## 用法
+## Usage
 
 ```sh
 export PATH="$HOME/Library/xPacks/riscv-none-elf-gcc/current/bin:$PATH"
-make run
-make verify
-make run CASE=21345671111111 EXPECT=11
-make run MOD3=branchless
-make run PRUNE=max
-make run PROC=RV32_5S
-make size
+make run                                  # the 10 cases of cases.s on RV32_ISS
+make verify                               # run, then check every answer on the host
+make run CASE=21345671111111 EXPECT=11    # one state; EXPECT may be omitted
+make verify PROC=RV32_5S                  # the 5-stage pipeline (T7)
+make run PRUNE=max                        # bound test as in search.c
+make run MOD3=branchless                  # mod 3 without a branch
+make size                                 # section sizes
+make solve.bin RENDER=1                   # GUI build that draws on the LED matrix
+make check-render                         # every LED frame against a 3-D model
 ```
 
-- `make run`：跑 `cases.s` 的 10 組測資（已解好、3 步、`tests/solutions.txt` 的 7 組、最壞的 distance-11 狀態）。
-- `make verify`：跑完後用 `../rv32/check_ripes` 在 host 上檢查每一組：重播、BFS 最短距離、解法和節點數跟 host 的 `search.c` 相同。
-- `CASE`、`EXPECT`：只跑一組，用來量單一狀態的 `--iret`。`EXPECT` 是期望步數，不知道就省略（255）。
-- `MOD3=branchless`：mod 3 改用不含分支的寫法，見下面的量測。
-- `PRUNE=max`：不提早結束，三張 PDB 都查完、算出 max 再比較，跟 `../search.c` 的 `node_h()` 做法相同。
+## LED matrix (`RENDER`)
 
-## LED matrix（`RENDER`）
+- `RENDER=0` (default, used for every measurement): no renderer; the image
+  is byte-identical to one built without it.
+- `RENDER=1`: draws the cube as an unfolded net before the replay and after
+  every move it replays, so the frames follow the solver's own output. GUI
+  only, since Ripes' CLI has no I/O devices: add one 35 × 25 LED Matrix in
+  the I/O tab and load `solve.bin` as a flat binary at address 0.
+- `RENDER=2`: the same frames as text; `check_render.py` compares them with
+  a 3-D model of the cube that uses none of the solver's tables.
 
-```sh
-make solve.bin RENDER=1 CASE=35621472211121 EXPECT=3
-make check-render
-```
+GNU as cannot see the symbols Ripes defines for its I/O devices, so the
+Makefile defines `LED_MATRIX_0_BASE`, `_WIDTH` and `_HEIGHT` with the values
+Ripes exports for a lone LED Matrix (`0xf0000000`, 35, 25). Pass other values
+to `make` if your I/O setup differs. How the mapping is derived: section 8 of
+the note.
 
-- `RENDER=1`：GUI 版。`replay` 開始前畫一次輸入的魔方，之後每重播一步就重畫一次展開圖，所以畫面是跟著程式自己算出的解法走，不是預錄的動畫。只能在 GUI 跑，因為 Ripes 的 CLI 沒有 I/O 裝置。
-- `LED_MATRIX_0_BASE`、`LED_MATRIX_0_WIDTH`、`LED_MATRIX_0_HEIGHT`：GNU as 看不到 Ripes 替 I/O 裝置定義的符號，所以由 Makefile 用 `--defsym` 定義一次，數值照 Ripes I/O 分頁 I/O exports 列出的值：只加一個 35 × 25 的 LED Matrix 時，`LED_MATRIX_0_BASE` 是 `0xf0000000`。先加了別的裝置的話，位址會不同，要在 make 時另外指定。程式裡只用符號名稱，不寫位址。矩陣小於 35 × 20 時組譯會直接報錯。
-- `RENDER=2`：同一個 `draw` 改成把每個畫面印成文字（35 × 20，`.` 是不亮的 LED，字母是面）。`make check-render` 用它跑 `cases.s`，再用 `check_render.py` 和一個獨立的 3D 模型逐格比對。這個模型只轉動 24 張貼紙的 3D 座標再投影到展開圖，不用 solver 的任何表格或座標。最後一個畫面必須是解好的魔方，從它把解法一步步倒轉回去，必須得到前面每一個畫面。10 組測資共 87 個畫面全部相同。
-- `RENDER=0`（預設，所有量測都用這個）：renderer 的程式和資料都不會組譯進來，image 跟加入 renderer 之前逐 byte 相同。
+## Build notes
 
-展開圖的版面：U 在上，L F R B 一排，D 在下，放在 4 × 3 的面格裡；每面 2 × 2 格，每格 4 寬 × 3 高，面和面之間隔一排不亮的 LED，所以是 4 × 8 + 3 = 35 寬、3 × 6 + 2 = 20 高，25 列裡空 5 列。每顆 LED 一個 word，位址是 `LED_MATRIX_0_BASE + 4 × (y × WIDTH + x)`（row-major）。
+- Linked with `--no-relax`, so every `la` stays two instructions and the
+  counts do not depend on where symbols land (relaxation once changed a
+  count by 18,693).
+- Ripes' print-string call also prints the trailing NUL, so strings are
+  printed with `write` (a7 = 64) and an explicit length.
+- Ripes' built-in assembler cannot assemble this file: it has no `.if`,
+  `.macro` or `.include`, and evaluates `.equ` expressions in its own order
+  (`3*4+1` gives 15). The program is built with GNU as and loaded with
+  `-t bin`.
 
-格子的顏色：`slot_face` 列出每個位置三格各是哪一面，從 U 或 D 那格開始，在角的外面看逆時針排。twist 的意思是從 `cube.h` 的 `twist[]` 推出來的：twist 為 t 的 cubie，它的 U/D 色貼紙落在從 U/D 那格逆時針數過去第 t 格（例如 R 把 FDR 的 cubie 轉到 FUR、twist 加 1，它的 D 貼紙正好轉到 F 那格，而 FUR 逆時針是 U → F → R）。所以位置 j 第 m 格的顏色，是這個 cubie 原本那個位置的第 (m − t) mod 3 格的面。
+## Files
 
-## 實測（RV32_ISS，`--iret`，單一測資）
-
-gcc 對照組是 `../rv32` 預設的迴圈版，和組語版一樣沒有遞迴；遞迴版（tag `stage3-c`，`DFS=recursive`）列在旁邊參考。
-
-| 測資 | 組語（預設） | 組語 `PRUNE=max` | gcc -O2 迴圈版 | gcc -O2 遞迴版 | 預設 / gcc 迴圈版 |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| `12345671111111`（已解好） | 769 | 769 | 1,968 | 1,750 | 0.39 |
-| `21345671111111` | 1,321,643 | 1,512,395 | 1,919,265 | 2,485,721 | 0.69 |
-| `54721631111111` | 3,954,531 | 4,521,721 | 5,742,490 | 7,438,599 | 0.69 |
-| `51342763312223`（最壞） | 4,296,273 | 4,900,912 | 6,226,078 | 8,066,912 | 0.69 |
-| `.text` bytes | 1,948 | 1,956 | 2,716 | 2,824 | 0.72 |
-
-- `.rodata` + `.bss` = 127,076 + 248 = 127,324 bytes，在 131,072 以內；gcc 迴圈版是 127,276 + 236 = 127,512（遞迴版 127,292，因為它把每一層放在 stack 上）。
-- 10 組一起跑（`make run`）共 5,997,516 條。
-- 比較時要注意：組語版多做了自我驗證（重播解法），gcc 版沒有；gcc 版印數字用減法迴圈，組語版用 Ripes 的 print-integer 呼叫。搜尋本身的差距才是主要來源，詳見 note。
-
-## 全部 2,644 個 distance-11 狀態（`../stage4/`）
-
-每個狀態在 RV32_ISS 上各跑一次，8 個同時跑，組語版每次約 2 分 45 秒：
-
-| | 組語（預設） | 組語 `PRUNE=max` | gcc -O2 迴圈版 | gcc -O2 遞迴版 |
-| :--- | ---: | ---: | ---: | ---: |
-| 失敗 / 超過 5 × 10⁷ 條 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
-| 平均 `--iret` | 1,084,723.0 | 1,242,566.3 | 1,575,885.6 | 2,040,094.5 |
-| 最大（`51342763312223`） | 4,296,273 | 4,900,912 | 6,226,078 | 8,066,912 |
-| 最小（`34165273222322`） | 519,419 | 596,253 | 755,173 | 977,198 |
-
-每一個狀態都通過程式內的自我驗證（重播回到解好、步數 11）。`../rv32/check_ripes` 在 host 上再逐一檢查：兩個組語版本的 2,644 個解法和節點數，都跟 host 的 `search.c` 相同。
-
-**組語贏在哪裡**：`PRUNE=max` 跟 gcc 迴圈版的演算法、查表順序和沒有遞迴的結構都相同，只差在寫法，平均只要 gcc 迴圈版的 79%（遞迴版的 61%）。從 gcc 遞迴版到組語預設版，省下的指令分成三段：
-
-| | 平均每次查詢省下 | 最壞的查詢省下 |
-| :--- | ---: | ---: |
-| C 裡把遞迴改成迴圈：gcc 遞迴版 → gcc 迴圈版 | 464,208.9（48.6%） | 1,840,834（48.8%） |
-| 手寫組語：gcc 迴圈版 → `PRUNE=max`（表的列指標、計數器、limit 都留在暫存器） | 333,319.3（34.9%） | 1,325,166（35.1%） |
-| 提早結束剪枝：`PRUNE=max` → 預設 | 157,843.3（16.5%） | 604,639（16.0%） |
-
-## 5 級 pipeline（T7）
-
-`make verify PROC=RV32_5S`：10 組測資在 `RV32_5S` 上也全部通過，`../rv32/check_ripes` 在 host 上逐一檢查過。
-
-| 10 組一起跑 | RV32_ISS | RV32_5S |
-| :--- | ---: | ---: |
-| `--iret` | 5,997,516 | 5,997,515 |
-| cycles | — | 7,271,749 |
-
-5S 的 CPI 是 1.21。指令數少 1，是最後那條 exit ecall 沒有計入。清單的 T7 還要用助教給的狀態重現，拿到後用 `make verify PROC=RV32_5S CASE=... EXPECT=...` 補上。
-
-## mod 3 的兩種寫法
-
-只有 `parse`（每組 7 次）和 `replay`（每轉一次 7 次）用到 mod 3，搜尋本身靠 `ori_q`、`add81` 查表。
-
-| 測資 | ISS 指令：分支 / branchless | 5S cycles：分支 / branchless |
-| :--- | ---: | ---: |
-| `12345671111111`（0 步） | 769 / 790 | 1,095 / 1,102 |
-| `35621472211121`（3 步） | 2,353 / 2,549 | 3,145 / 3,229 |
-| `62345713133111`（8 步） | 13,080 / 13,407 | 16,237 / 16,386 |
-
-分支版（`bltu` 跳過一條 `addi`）是 1–2 條，branchless 版（`sltiu`、`addi`、`andi`、`sub`）固定 4 條。在 5 級 pipeline 上，跳躍成立的分支要多付 cycle，差距縮小到大約一半，但分支版仍然比較快，所以預設用分支版。另外，同樣的 branchless 寫法在 C 裡會被 gcc 轉回分支（見 `../stage3/mod3_gcc.txt`）。
-
-5S 的 `--iret` 比 ISS 少 1：最後那條 exit ecall 在 5S 上沒有計入。
-
-## 建置上的兩個坑
-
-1. **連結時要加 `--no-relax`**。GNU ld 預設會做 relaxation：位址放得進 12 bits 的 `la` 會縮成一條指令，`.bss` 附近的符號會改成相對 gp 的定址。結果是指令數會隨符號的位置改變：branchless 版多了 32 bytes 程式碼，把 `face_rows` 推過 2,048，兩個 build 就差了 18,693 條，而那跟 mod 3 無關。另外這個程式不設定 gp，gp 相對定址本來就不該出現。
-2. **Ripes 的印字串呼叫（a7 = 4）會把結尾的 NUL 也印出來**，`check_ripes` 用 C 字串函式解析，碰到 NUL 就斷掉。所以字串都用 write（a7 = 64）加上長度印。Ripes 內建的組譯器也不能用：它不支援 `.if`、`.macro`、`.include`，`.equ` 的運算順序也不對（`3*4+1` 算成 15）。所以這裡用 GNU as 組譯，再用 `-t bin` 載入。
-
-## 檔案
-
-| 檔案 | 說明 |
+| File | What |
 | :--- | :--- |
-| `solve.s` | 組語程式：輸入檢查、起點座標、IDA*、輸出、自我驗證 |
-| `cases.s` | 測資：14 個字元、期望步數、補齊用的 1 byte；0 表示結束 |
-| `Makefile` | GNU as + `../rv32/link.ld` + `objcopy`，Ripes `-t bin` |
-| `check_render.py` | `RENDER=2` 的每個畫面和獨立的 3D 模型比對（`make check-render`） |
+| `solve.s` | input check, start coordinates, IDA*, output, self-check, renderer |
+| `cases.s` | test cases: 14 characters, expected length, a pad byte; a 0 byte ends the list |
+| `Makefile` | GNU as + `../rv32/link.ld` + `objcopy`, loaded with `-t bin` |
+| `check_render.py` | the renderer check run by `make check-render` |
