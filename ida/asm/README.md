@@ -28,6 +28,22 @@ make size
 - `MOD3=branchless`：mod 3 改用不含分支的寫法，見下面的量測。
 - `PRUNE=max`：不提早結束，三張 PDB 都查完、算出 max 再比較，跟 `../search.c` 的 `node_h()` 做法相同。
 
+## LED matrix（`RENDER`）
+
+```sh
+make solve.bin RENDER=1 CASE=35621472211121 EXPECT=3
+make check-render
+```
+
+- `RENDER=1`：GUI 版。`replay` 開始前畫一次輸入的魔方，之後每重播一步就重畫一次展開圖，所以畫面是跟著程式自己算出的解法走，不是預錄的動畫。只能在 GUI 跑，因為 Ripes 的 CLI 沒有 I/O 裝置。
+- `LED_MATRIX_0_BASE`、`LED_MATRIX_0_WIDTH`、`LED_MATRIX_0_HEIGHT`：GNU as 看不到 Ripes 替 I/O 裝置定義的符號，所以由 Makefile 用 `--defsym` 定義一次，數值照 Ripes I/O 分頁 I/O exports 列出的值：只加一個 35 × 25 的 LED Matrix 時，`LED_MATRIX_0_BASE` 是 `0xf0000000`。先加了別的裝置的話，位址會不同，要在 make 時另外指定。程式裡只用符號名稱，不寫位址。矩陣小於 35 × 20 時組譯會直接報錯。
+- `RENDER=2`：同一個 `draw` 改成把每個畫面印成文字（35 × 20，`.` 是不亮的 LED，字母是面）。`make check-render` 用它跑 `cases.s`，再用 `check_render.py` 和一個獨立的 3D 模型逐格比對。這個模型只轉動 24 張貼紙的 3D 座標再投影到展開圖，不用 solver 的任何表格或座標。最後一個畫面必須是解好的魔方，從它把解法一步步倒轉回去，必須得到前面每一個畫面。10 組測資共 93 個畫面全部相同。
+- `RENDER=0`（預設，所有量測都用這個）：renderer 的程式和資料都不會組譯進來，image 跟加入 renderer 之前逐 byte 相同。
+
+展開圖的版面：U 在上，L F R B 一排，D 在下，放在 4 × 3 的面格裡；每面 2 × 2 格，每格 4 寬 × 3 高，面和面之間隔一排不亮的 LED，所以是 4 × 8 + 3 = 35 寬、3 × 6 + 2 = 20 高，25 列裡空 5 列。每顆 LED 一個 word，位址是 `LED_MATRIX_0_BASE + 4 × (y × WIDTH + x)`（row-major）。
+
+格子的顏色：`slot_face` 列出每個位置三格各是哪一面，從 U 或 D 那格開始，在角的外面看逆時針排。twist 的意思是從 `cube.h` 的 `twist[]` 推出來的：twist 為 t 的 cubie，它的 U/D 色貼紙落在從 U/D 那格逆時針數過去第 t 格（例如 R 把 FDR 的 cubie 轉到 FUR、twist 加 1，它的 D 貼紙正好轉到 F 那格，而 FUR 逆時針是 U → F → R）。所以位置 j 第 m 格的顏色，是這個 cubie 原本那個位置的第 (m − t) mod 3 格的面。
+
 ## 實測（RV32_ISS，`--iret`，單一測資）
 
 gcc 對照組是 `../rv32` 預設的迴圈版，和組語版一樣沒有遞迴；遞迴版（tag `stage3-c`，`DFS=recursive`）列在旁邊參考。
@@ -102,3 +118,4 @@ gcc 對照組是 `../rv32` 預設的迴圈版，和組語版一樣沒有遞迴�
 | `solve.s` | 組語程式：輸入檢查、起點座標、IDA*、輸出、自我驗證 |
 | `cases.s` | 測資：14 個字元、期望步數、補齊用的 1 byte；0 表示結束 |
 | `Makefile` | GNU as + `../rv32/link.ld` + `objcopy`，Ripes `-t bin` |
+| `check_render.py` | `RENDER=2` 的每個畫面和獨立的 3D 模型比對（`make check-render`） |

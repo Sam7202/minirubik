@@ -7,6 +7,8 @@
 #   make run PRUNE=max       h = max of the PDBs as in search.c, no early exit
 #   make run PROC=RV32_5S    pipeline model (much slower)
 #   make size                section sizes of the image
+#   make solve.bin RENDER=1  GUI build that draws on the LED matrix
+#   make check-render        every frame of the renderer against a 3-D model
 
 RIPES   ?= /Applications/Ripes.app/Contents/MacOS/Ripes
 RVAS      ?= riscv-none-elf-as
@@ -27,6 +29,26 @@ ASFLAGS += --defsym MOD3_BRANCHLESS=1
 endif
 ifeq ($(PRUNE),max)
 ASFLAGS += --defsym EARLY_PRUNE=0
+endif
+
+# RENDER=1 is for the GUI only: Ripes' CLI has no I/O devices. GNU as cannot
+# see the symbols Ripes defines for them, so they are defined here, once,
+# with the values Ripes exports for the LED Matrix in its I/O tab (the only
+# device, 35 x 25: BASE 0xf0000000, SIZE 0xdac, WIDTH 0x23, HEIGHT 0x19).
+RENDER              ?= 0
+LED_MATRIX_0_BASE   ?= 0xf0000000
+LED_MATRIX_0_WIDTH  ?= 35
+LED_MATRIX_0_HEIGHT ?= 25
+ifeq ($(RENDER),1)
+ifeq ($(LED_MATRIX_0_BASE),)
+$(error RENDER=1 needs LED_MATRIX_0_BASE: the address Ripes lists for the LED Matrix in the I/O tab)
+endif
+ASFLAGS += --defsym RENDER=1 --defsym LED_MATRIX_0_BASE=$(LED_MATRIX_0_BASE) \
+           --defsym LED_MATRIX_0_WIDTH=$(LED_MATRIX_0_WIDTH) \
+           --defsym LED_MATRIX_0_HEIGHT=$(LED_MATRIX_0_HEIGHT)
+endif
+ifeq ($(RENDER),2)
+ASFLAGS += --defsym RENDER=2
 endif
 
 ifeq ($(CASE),)
@@ -77,10 +99,18 @@ verify: solve.bin
 	@echo "---- host check ----"
 	../rv32/check_ripes < ripes_out.txt
 
+# The renderer on the host: the RENDER=2 build prints every frame as text,
+# and check_render.py compares each one with a 3-D model of the cube.
+check-render:
+	$(MAKE) -s solve.bin RENDER=2
+	$(RIPESRUN) > render_out.txt
+	python3 check_render.py < render_out.txt
+
 size: solve.elf
 	$(RVSIZE) -A solve.elf
 
 clean:
-	$(RM) solve.o cases.o tables.o solve.elf solve.bin case_one.s ripes_out.txt
+	$(RM) solve.o cases.o tables.o solve.elf solve.bin case_one.s ripes_out.txt \
+	  render_out.txt
 
-.PHONY: all run verify size clean FORCE
+.PHONY: all run verify check-render size clean FORCE

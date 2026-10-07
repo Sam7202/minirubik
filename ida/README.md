@@ -39,6 +39,7 @@ make check DFS=recursive   # 改用遞迴版 dfs()（tag stage3-c），執行檔
 make -C rv32 verify        # Ripes 實測 --iret，並回 host 驗證解法（見 rv32/README.md）
 make -C asm verify         # 組語版：Ripes 實測並回 host 驗證（見 asm/README.md）
 make -C asm verify PROC=RV32_5S   # 同上，改在 5 級 pipeline 上跑（T7）
+make -C asm check-render   # LED 展開圖：每個畫面和獨立的 3D 模型比對（見 asm/README.md）
 cc -O2 -std=c99 -Wall -Wextra -Wpedantic -DCORNER_PDB=1 -I. stage4/d11.c tables.c -o stage4/d11
 stage4/d11 > stage4/d11.txt           # batch.py 的輸入：2,644 個 distance-11 狀態
 stage4/batch.py asm > stage4/asm.csv  # 每個狀態在 Ripes 上各跑一次（見 stage4/README.md）

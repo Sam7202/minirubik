@@ -31,5 +31,6 @@ d11
 *.bin
 *.out
 ripes_out.txt
+render_out.txt
 d11.txt
 .DS_Store

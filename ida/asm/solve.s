@@ -22,6 +22,12 @@
 # cube (source/twist of ../cube.h), and the length is compared with the one
 # in the case list. The exit code is the number of failed cases.
 #
+# RENDER=1 draws the cube as an unfolded net on Ripes' LED matrix before the
+# replay and after every move it replays, so the frames follow the solver's
+# own output. RENDER=2 draws the same frames as text, for check_render.py on
+# the host. RENDER=0, the default and the measured build, has no renderer:
+# every RENDER block below assembles to nothing.
+#
 # Build and run: see Makefile (GNU as, linked with ../tables.s, -t bin).
 
     .ifndef MOD3_BRANCHLESS
@@ -29,6 +35,26 @@
     .endif
     .ifndef EARLY_PRUNE
     .equ EARLY_PRUNE, 1         # 0: h = max of the three PDBs, as search.c
+    .endif
+    .ifndef RENDER
+    .equ RENDER, 0              # 1: LED matrix (GUI), 2: text frames (check)
+    .endif
+
+    # The net: faces U; L F R B; D in a 4 x 3 grid of face slots, 2 x 2
+    # facelets per face, each facelet 4 LEDs wide and 3 tall, one dark LED
+    # between faces: 4 * 8 + 3 = 35 wide, 3 * 6 + 2 = 20 tall. A frame
+    # stores PIX bytes per LED and STRIDE LEDs per row.
+    .if RENDER == 1
+    # GNU as cannot see the symbols Ripes defines for its I/O devices, so the
+    # Makefile defines them with the values Ripes lists for the LED Matrix.
+    .if LED_MATRIX_0_WIDTH < 35 || LED_MATRIX_0_HEIGHT < 20
+    .error "the net needs an LED matrix at least 35 wide and 20 tall"
+    .endif
+    .equ PIX, 4                 # one 32-bit RGB word per LED
+    .equ STRIDE, LED_MATRIX_0_WIDTH
+    .elseif RENDER == 2
+    .equ PIX, 1                 # one character per LED
+    .equ STRIDE, 36             # 35 and a newline
     .endif
 
     .equ CUBIES, 7
@@ -115,6 +141,61 @@ face_rows:
     .word c4pos_q + C4POS_Q_ROW, c4tw_q + C4TW_Q_ROW
     .word perm_q + 2 * PERM_Q_ROW, ori_q + 2 * ORI_Q_ROW
     .word c4pos_q + 2 * C4POS_Q_ROW, c4tw_q + 2 * C4TW_Q_ROW
+
+    .if RENDER
+# Faces: 0 U, 1 R, 2 F, 3 D, 4 L, 5 B. slot_face[j] lists the faces of the
+# three facelets of position j, starting at its U or D facelet and going
+# counterclockwise as seen from outside the corner. A cubie of twist t in
+# position j has its U/D sticker t facelets on, so facelet m shows sticker
+# (m - t) mod 3 of that cubie, whose colours are slot_face of its home
+# position (the cubie number). Derived from cube.h's twist[]; see the README.
+slot_face:   .byte 0, 4, 2          # 0 ULF, the fixed corner
+             .byte 0, 2, 1          # 1 UFR
+             .byte 3, 1, 2          # 2 DRF
+             .byte 3, 2, 4          # 3 DFL
+             .byte 0, 1, 5          # 4 URB
+             .byte 3, 5, 1          # 5 DBR
+             .byte 3, 4, 5          # 6 DLB
+             .byte 0, 5, 4          # 7 UBL
+
+    .align 1
+# facelet_off[j][m]: offset of the top-left LED of facelet m of position j,
+# at column x and row y of the net.
+    .macro FACELET x, y
+    .half PIX * (\y * STRIDE + \x)
+    .endm
+facelet_off: FACELET  9, 3;  FACELET  4,  7; FACELET  9,  7
+             FACELET 13, 3;  FACELET 13,  7; FACELET 18,  7
+             FACELET 13, 14; FACELET 18, 10; FACELET 13, 10
+             FACELET  9, 14; FACELET  9, 10; FACELET  4, 10
+             FACELET 13, 0;  FACELET 22,  7; FACELET 27,  7
+             FACELET 13, 17; FACELET 27, 10; FACELET 22, 10
+             FACELET  9, 17; FACELET  0, 10; FACELET 31, 10
+             FACELET  9, 0;  FACELET 31,  7; FACELET  0,  7
+
+    .align 2
+    .if RENDER == 1
+colors:      .word 0xFFFFFF         # U white
+             .word 0xFF0000         # R red
+             .word 0x00C000         # F green
+             .word 0xFFFF00         # D yellow
+             .word 0xFF8000         # L orange
+             .word 0x0040FF         # B blue
+    .else
+colors:      .word 'U', 'R', 'F', 'D', 'L', 'B'
+    .endif
+    .endif
+
+    .if RENDER == 2
+    .data
+# One frame as text: a newline, then 20 rows of 35 LEDs ('.' when dark).
+net_txt:     .byte 10
+net_rows:    .rept 20
+             .ascii "..................................."
+             .byte 10
+             .endr
+    .equ net_txt_len, . - net_txt
+    .endif
 
     .bss
     .align 2
@@ -585,11 +666,18 @@ ida_solve:
 # direct model (cube.h's quarter_turn, alternating with cube_b) and returns
 # a0 = 1 if the cube ends solved (p[i] = i, o[i] = 0), otherwise 0.
 replay:
+    .if RENDER
+    addi  sp, sp, -16
+    sw    ra, 12(sp)
+    .endif
     la    a1, path
     add   a2, a1, a0            # end of the moves
     la    a3, cube_a            # current cube
     la    a4, cube_b            # next cube
     li    t6, 3
+    .if RENDER
+    jal   draw                  # the cube as given
+    .endif
 1:  beq   a1, a2, 5f
     lbu   t0, 0(a1)             # move
     la    t1, move_face
@@ -626,6 +714,9 @@ replay:
     addi  a5, a5, -1
     bnez  a5, 2b
     addi  a1, a1, 1
+    .if RENDER
+    jal   draw                  # the cube after this move
+    .endif
     j     1b
 5:  li    a6, 0                 # solved: p[i] = i and o[i] = 0
 6:  add   t0, a3, a6
@@ -637,6 +728,97 @@ replay:
     li    t0, CUBIES
     bne   a6, t0, 6b
     li    a0, 1
+    .if RENDER
+    j     8f
+    .else
     ret
+    .endif
 7:  li    a0, 0
+    .if RENDER
+8:  lw    ra, 12(sp)
+    addi  sp, sp, 16
+    .endif
     ret
+
+    .if RENDER
+# draw: one frame of the cube at a3 (p[7] then o[7]): RENDER=1 writes the
+# LED matrix, RENDER=2 prints the frame as text. Keeps every register
+# replay uses (a1-a4, t6).
+draw:
+    addi  sp, sp, -32
+    sw    ra, 28(sp)
+    sw    a1, 24(sp)
+    sw    a2, 20(sp)
+    sw    a3, 16(sp)
+    sw    a4, 12(sp)
+    sw    t6, 8(sp)
+    .if RENDER == 1
+    li    a7, LED_MATRIX_0_BASE
+    .else
+    la    a7, net_rows
+    .endif
+    li    a5, 0                 # position j
+1:  li    a6, 0                 # position 0 holds cubie 0, never twisted
+    li    a4, 0
+    beqz  a5, 2f
+    add   t0, a3, a5
+    lbu   a6, -1(t0)            # p[j - 1] + 1: the cubie's home position
+    addi  a6, a6, 1
+    lbu   a4, CUBIES - 1(t0)    # its twist
+2:  slli  t0, a6, 1             # home * 3
+    add   t0, t0, a6
+    la    t1, slot_face
+    add   a6, t1, t0            # its colours, sticker 0 first
+    slli  t0, a5, 1             # j * 3 halfwords
+    add   t0, t0, a5
+    slli  t0, t0, 1
+    la    t1, facelet_off
+    add   a2, t1, t0            # this position's facelets
+    li    a0, 0                 # facelet m
+3:  sub   t0, a0, a4            # sticker (m - twist) mod 3
+    bgez  t0, 4f
+    addi  t0, t0, 3
+4:  add   t0, a6, t0
+    lbu   t0, 0(t0)             # its face
+    slli  t0, t0, 2
+    la    t1, colors
+    add   t0, t1, t0
+    lw    t4, 0(t0)             # its colour
+    slli  t0, a0, 1
+    add   t0, a2, t0
+    lhu   t2, 0(t0)
+    add   t2, a7, t2            # top-left LED of the facelet
+    li    t5, 3                 # 3 rows of 4 LEDs
+5:
+    .if RENDER == 1
+    sw    t4, 0(t2)
+    sw    t4, 4(t2)
+    sw    t4, 8(t2)
+    sw    t4, 12(t2)
+    .else
+    sb    t4, 0(t2)
+    sb    t4, 1(t2)
+    sb    t4, 2(t2)
+    sb    t4, 3(t2)
+    .endif
+    addi  t2, t2, PIX * STRIDE
+    addi  t5, t5, -1
+    bnez  t5, 5b
+    addi  a0, a0, 1
+    li    t0, 3
+    bne   a0, t0, 3b
+    addi  a5, a5, 1
+    li    t0, 8
+    bne   a5, t0, 1b
+    .if RENDER == 2
+    PRINT net_txt
+    .endif
+    lw    ra, 28(sp)
+    lw    a1, 24(sp)
+    lw    a2, 20(sp)
+    lw    a3, 16(sp)
+    lw    a4, 12(sp)
+    lw    t6, 8(sp)
+    addi  sp, sp, 32
+    ret
+    .endif
